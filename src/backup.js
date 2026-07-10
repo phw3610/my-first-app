@@ -1,7 +1,24 @@
 import { Platform } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 
-export async function exportBackup(data) {
+// 백업에는 링크는 그대로, 사진/파일은 이름만 저장 (파일 실체는 포함하지 않음)
+function sanitizeForExport(data) {
+  return {
+    ...data,
+    todos: data.todos.map((t) => ({
+      ...t,
+      steps: (t.steps ?? []).map((s) => ({
+        ...s,
+        attachments: (s.attachments ?? []).map((a) =>
+          a.type === 'link' ? a : { type: a.type, name: a.name },
+        ),
+      })),
+    })),
+  };
+}
+
+export async function exportBackup(rawData) {
+  const data = sanitizeForExport(rawData);
   const json = JSON.stringify(
     { app: 'quack-todo', version: 2, exportedAt: new Date().toISOString(), data },
     null,

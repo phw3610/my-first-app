@@ -5,12 +5,33 @@ const OLD_KEY = 'todos-v1';
 
 export const emptyData = { todos: [], categories: [], collapsed: {} };
 
+function normalizeStep(s) {
+  const attachments = Array.isArray(s.attachments)
+    ? s.attachments
+    : s.attachment
+      ? [{ type: 'file', ...s.attachment }]
+      : [];
+  return { text: s.text ?? '', attachments };
+}
+
 export function normalizeTodo(t) {
   const totalSteps = t.totalSteps ?? 1;
-  const steps = Array.isArray(t.steps) ? t.steps.slice(0, totalSteps) : [];
-  while (steps.length < totalSteps) steps.push({ text: '', attachment: null });
+  const steps = (Array.isArray(t.steps) ? t.steps.slice(0, totalSteps) : []).map(
+    normalizeStep,
+  );
+  while (steps.length < totalSteps) steps.push({ text: '', attachments: [] });
   const timeline = Array.isArray(t.timeline) ? t.timeline : [];
-  return { archived: false, ...t, totalSteps, steps, timeline };
+  return {
+    archived: false,
+    reminder: null,
+    repeat: null,
+    dueDate: null,
+    lastSpawnedDate: null,
+    ...t,
+    totalSteps,
+    steps,
+    timeline,
+  };
 }
 
 export function normalizeData(data) {

@@ -17,8 +17,10 @@ import DayView from './src/DayView';
 import EditTodoModal from './src/EditTodoModal';
 import EggIcon from './src/EggIcon';
 import MenuModal from './src/MenuModal';
+import { cancelReminder, scheduleReminder } from './src/notifications';
+import { dateStr, spawnRepeats } from './src/repeat';
 import { emptyData, loadData, normalizeData, saveData } from './src/storage';
-import { C, CATEGORY_COLORS } from './src/theme';
+import { C, CATEGORY_COLORS, isDark } from './src/theme';
 
 const isDone = (t) => t.doneSteps >= t.totalSteps;
 const isStarted = (t) => (t.timeline?.length ?? 0) > 0 || t.doneSteps > 0;
@@ -36,6 +38,8 @@ export default function App() {
   const [editingId, setEditingId] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [dragging, setDragging] = useState(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState('');
 
   const listWrapRef = useRef(null);
   const listTopRef = useRef(0);
@@ -50,7 +54,7 @@ export default function App() {
 
   useEffect(() => {
     loadData().then((d) => {
-      setData(d);
+      setData(spawnRepeats(d) ?? d);
       setLoaded(true);
     });
     if (Platform.OS === 'web') {
@@ -74,8 +78,14 @@ export default function App() {
     [categories],
   );
 
-  const active = todos.filter((t) => !t.archived);
-  const archived = todos.filter((t) => t.archived);
+  const q = query.trim().toLowerCase();
+  const matchesQuery = (t) =>
+    !q ||
+    t.title.toLowerCase().includes(q) ||
+    t.steps?.some((s) => s.text?.toLowerCase().includes(q));
+
+  const active = todos.filter((t) => !t.archived && matchesQuery(t));
+  const archived = todos.filter((t) => t.archived && matchesQuery(t));
 
   const visibleTodos =
     filter === 'all'
@@ -111,7 +121,7 @@ export default function App() {
     const nonEmpty = secs.filter((sec) => sec.total > 0);
     if (archived.length) nonEmpty.push(make('archived', '완료', C.green, archived));
     return nonEmpty;
-  }, [todos, categories, filter, catById]);
+  }, [todos, categories, filter, catById, q]);
   sectionsRef.current = sections;
 
   // ---- 드래그 앤 드롭
@@ -259,11 +269,13 @@ export default function App() {
     }));
 
   const updateTodo = (id, fields) => {
+    const prev = todos.find((t) => t.id === id);
+    const { reminderAt, ...rest } = fields;
     setData((d) => ({
       ...d,
       todos: d.todos.map((t) => {
         if (t.id !== id) return t;
-        const merged = { ...t, ...fields };
+        const merged = { ...t, ...rest };
         merged.totalSteps = merged.steps.length;
         merged.doneSteps = Math.min(merged.doneSteps, merged.totalSteps);
         if (merged.doneSteps !== t.doneSteps) {
@@ -279,10 +291,38 @@ export default function App() {
       }),
     }));
     setEditingId(null);
+
+    const prevAt = prev?.reminder?.at ?? null;
+    if (reminderAt !== undefined && reminderAt !== prevAt) {
+      (async () => {
+        await cancelReminder(prev?.reminder?.notificationId);
+        let notificationId = null;
+        if (reminderAt) {
+          try {
+            notificationId = await scheduleReminder(
+              rest.title ?? prev?.title ?? '',
+              new Date(reminderAt),
+            );
+          } catch (e) {
+            // 권한 거부 등 — 시간은 저장하되 예약은 생략
+          }
+        }
+        setData((d) => ({
+          ...d,
+          todos: d.todos.map((t) =>
+            t.id === id
+              ? { ...t, reminder: reminderAt ? { at: reminderAt, notificationId } : null }
+              : t,
+          ),
+        }));
+      })();
+    }
   };
 
   const removeTodo = (id) => {
-    setData((d) => ({ ...d, todos: d.todos.filter((t) => t.id !== id) }));
+    const t = todos.find((x) => x.id === id);
+    cancelReminder(t?.reminder?.notificationId);
+    setData((d) => ({ ...d, todos: d.todos.filter((x) => x.id !== id) }));
     setEditingId(null);
   };
 
@@ -326,7 +366,7 @@ export default function App() {
 
   const bubbleMessage =
     page === 'day'
-      ? '하루를 돌아볼까요? 꽥!'
+      ? '저를 누르면 투두로 돌아가요, 꽥!'
       : filter === 'archived'
         ? `지금까지 ${archived.length}마리 부화했어요, 꽥!`
         : visibleTodos.length === 0
@@ -339,6 +379,7 @@ export default function App() {
 
   const renderRow = (item) => {
     const current = !isDone(item) ? item.steps?.[item.doneSteps] : null;
+    const overdue = item.dueDate && item.dueDate < dateStr() && !isDone(item);
     return (
       <Pressable
         key={item.id}
@@ -358,9 +399,18 @@ export default function App() {
         <View style={styles.rowBody}>
           <Text style={[styles.rowText, isDone(item) && styles.rowTextDone]}>
             {item.title}
+            {item.reminder?.at ? ' ⏰' : ''}
+            {item.repeat ? ' 🔁' : ''}
           </Text>
-          {(item.totalSteps > 1 || current?.text) && !isDone(item) && (
+          {(item.totalSteps > 1 || current?.text || current?.attachments?.length || item.dueDate) &&
+            !isDone(item) && (
             <View style={styles.progressRow}>
+              {item.dueDate && (
+                <Text style={[styles.dueBadge, overdue && styles.dueBadgeOver]}>
+                  📅 {Number(item.dueDate.slice(5, 7))}/{Number(item.dueDate.slice(8, 10))}
+                  {overdue ? ' 지남!' : ''}
+                </Text>
+              )}
               {item.totalSteps > 1 && (
                 <>
                   {Array.from({ length: item.totalSteps }, (_, i) => (
@@ -377,11 +427,11 @@ export default function App() {
                   </Text>
                 </>
               )}
-              {current?.text ? (
+              {current?.text || current?.attachments?.length ? (
                 <Text style={styles.stepHint} numberOfLines={1}>
-                  {item.totalSteps > 1 ? ' · ' : ''}
+                  {item.totalSteps > 1 || item.dueDate ? ' · ' : ''}
                   {current.text}
-                  {current.attachment ? ' 📎' : ''}
+                  {current.attachments?.length ? ` 📎${current.attachments.length}` : ''}
                 </Text>
               ) : null}
             </View>
@@ -421,13 +471,19 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar style="dark" />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.header}>
-          <Text style={styles.mascot}>🐥</Text>
+          <Pressable
+            testID="mascot-btn"
+            onPress={() => setPage((p) => (p === 'day' ? 'list' : 'day'))}
+            hitSlop={8}
+          >
+            <Text style={styles.mascot}>🐥</Text>
+          </Pressable>
           <View style={styles.headerText}>
             <Text style={styles.title}>{page === 'day' ? '하루보기' : '꽥! 투두'}</Text>
             <View style={styles.bubble}>
@@ -484,8 +540,30 @@ export default function App() {
                     onPress={() => selectFilter('archived')}
                   />
                 )}
+                <Chip
+                  testID="search-toggle"
+                  label="🔍"
+                  active={searchOpen}
+                  onPress={() => {
+                    if (searchOpen) setQuery('');
+                    setSearchOpen(!searchOpen);
+                  }}
+                />
               </ScrollView>
             </View>
+
+            {searchOpen && (
+              <View style={styles.searchBar}>
+                <TextInput
+                  style={styles.searchInput}
+                  value={query}
+                  onChangeText={setQuery}
+                  placeholder="제목이나 단계 내용으로 검색..."
+                  placeholderTextColor={C.faint}
+                  autoFocus
+                />
+              </View>
+            )}
 
             <View
               style={styles.listWrap}
@@ -594,7 +672,7 @@ export default function App() {
                   onChangeText={setText}
                   onSubmitEditing={addTodo}
                   placeholder="새 할 일을 꽥꽥..."
-                  placeholderTextColor="#C9AE6B"
+                  placeholderTextColor={C.faint}
                   returnKeyType="done"
                 />
                 <Pressable
@@ -621,11 +699,6 @@ export default function App() {
       {menuOpen && (
         <MenuModal
           data={data}
-          page={page}
-          onTogglePage={() => {
-            setPage(page === 'day' ? 'list' : 'day');
-            setMenuOpen(false);
-          }}
           onAddCategory={addCategory}
           onRenameCategory={renameCategory}
           onDeleteCategory={deleteCategory}
@@ -840,6 +913,27 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: C.faint,
+  },
+  dueBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: C.sub,
+    marginRight: 4,
+  },
+  dueBadgeOver: {
+    color: C.danger,
+  },
+  searchBar: {
+    paddingHorizontal: 16,
+    paddingBottom: 6,
+  },
+  searchInput: {
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: C.inputBg,
+    paddingHorizontal: 14,
+    fontSize: 14,
+    color: C.text,
   },
   nextBtn: {
     width: 36,
