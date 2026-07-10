@@ -13,6 +13,8 @@ import { C } from './theme';
 
 export default function MenuModal({
   data,
+  page,
+  onTogglePage,
   onAddCategory,
   onRenameCategory,
   onDeleteCategory,
@@ -59,6 +61,12 @@ export default function MenuModal({
         <View style={s.card}>
           <ScrollView>
             <Text style={s.heading}>메뉴 🐥</Text>
+
+            <Pressable testID="toggle-page" style={s.pageBtn} onPress={onTogglePage}>
+              <Text style={s.pageBtnText}>
+                {page === 'day' ? '📝 투두로 돌아가기' : '📅 하루보기'}
+              </Text>
+            </Pressable>
 
             <Text style={s.sectionTitle}>분류 관리</Text>
             {data.categories.length === 0 && (
@@ -183,6 +191,18 @@ const s = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800',
     color: C.text,
+  },
+  pageBtn: {
+    marginTop: 14,
+    backgroundColor: C.orange,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  pageBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
   },
   sectionTitle: {
     marginTop: 18,

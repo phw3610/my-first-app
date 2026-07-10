@@ -9,7 +9,8 @@ export function normalizeTodo(t) {
   const totalSteps = t.totalSteps ?? 1;
   const steps = Array.isArray(t.steps) ? t.steps.slice(0, totalSteps) : [];
   while (steps.length < totalSteps) steps.push({ text: '', attachment: null });
-  return { archived: false, ...t, totalSteps, steps };
+  const timeline = Array.isArray(t.timeline) ? t.timeline : [];
+  return { archived: false, ...t, totalSteps, steps, timeline };
 }
 
 export function normalizeData(data) {
