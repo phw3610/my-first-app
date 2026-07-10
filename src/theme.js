@@ -12,6 +12,7 @@ export const C = {
   inputBg: '#FFF3CC',
   barBg: '#FFFDF5',
   danger: '#E96A4C',
+  green: '#7BC67E',
 };
 
 export const CATEGORY_COLORS = [

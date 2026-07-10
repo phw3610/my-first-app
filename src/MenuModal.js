@@ -119,7 +119,7 @@ export default function MenuModal({
             <Text style={s.sectionTitle}>데이터 백업</Text>
             <Text style={s.hint}>
               파일로 내보낸 뒤 iCloud Drive에 저장하면 안전하게 보관돼요. 다른 폰에서도
-              불러올 수 있어요.
+              불러올 수 있어요. (단계에 첨부한 파일은 백업에 포함되지 않아요.)
             </Text>
             <View style={s.backupRow}>
               <Pressable style={s.backupBtn} onPress={doExport}>

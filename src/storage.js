@@ -3,11 +3,28 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const KEY = 'quack-data-v2';
 const OLD_KEY = 'todos-v1';
 
-export const emptyData = { todos: [], categories: [] };
+export const emptyData = { todos: [], categories: [], collapsed: {} };
+
+export function normalizeTodo(t) {
+  const totalSteps = t.totalSteps ?? 1;
+  const steps = Array.isArray(t.steps) ? t.steps.slice(0, totalSteps) : [];
+  while (steps.length < totalSteps) steps.push({ text: '', attachment: null });
+  return { archived: false, ...t, totalSteps, steps };
+}
+
+export function normalizeData(data) {
+  return {
+    ...emptyData,
+    ...data,
+    todos: (data.todos ?? []).map(normalizeTodo),
+    categories: data.categories ?? [],
+    collapsed: data.collapsed ?? {},
+  };
+}
 
 export async function loadData() {
   const raw = await AsyncStorage.getItem(KEY);
-  if (raw) return JSON.parse(raw);
+  if (raw) return normalizeData(JSON.parse(raw));
   const old = await AsyncStorage.getItem(OLD_KEY);
   if (old) {
     const todos = JSON.parse(old).map((t) => ({
@@ -18,7 +35,7 @@ export async function loadData() {
       doneSteps: t.done ? 1 : 0,
       createdAt: Number(t.id) || Date.now(),
     }));
-    return { ...emptyData, todos };
+    return normalizeData({ todos });
   }
   return emptyData;
 }

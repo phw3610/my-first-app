@@ -16,7 +16,7 @@ import Chip from './src/Chip';
 import EditTodoModal from './src/EditTodoModal';
 import EggIcon from './src/EggIcon';
 import MenuModal from './src/MenuModal';
-import { emptyData, loadData, saveData } from './src/storage';
+import { emptyData, loadData, normalizeData, saveData } from './src/storage';
 import { C, CATEGORY_COLORS } from './src/theme';
 
 const isDone = (t) => t.doneSteps >= t.totalSteps;
@@ -24,7 +24,7 @@ const isDone = (t) => t.doneSteps >= t.totalSteps;
 export default function App() {
   const [data, setData] = useState(emptyData);
   const [loaded, setLoaded] = useState(false);
-  const [filter, setFilter] = useState('all'); // 'all' | 'none' | categoryId
+  const [filter, setFilter] = useState('all'); // 'all' | 'none' | 'archived' | categoryId
   const [text, setText] = useState('');
   const [newSteps, setNewSteps] = useState(1);
   const [newCat, setNewCat] = useState(null);
@@ -42,47 +42,54 @@ export default function App() {
     if (loaded) saveData(data);
   }, [data, loaded]);
 
-  const { todos, categories } = data;
+  const { todos, categories, collapsed } = data;
   const catById = useMemo(
     () => Object.fromEntries(categories.map((c) => [c.id, c])),
     [categories],
   );
 
+  const active = todos.filter((t) => !t.archived);
+  const archived = todos.filter((t) => t.archived);
+
   const visibleTodos =
     filter === 'all'
-      ? todos
-      : filter === 'none'
-        ? todos.filter((t) => !catById[t.categoryId])
-        : todos.filter((t) => t.categoryId === filter);
+      ? active
+      : filter === 'archived'
+        ? archived
+        : filter === 'none'
+          ? active.filter((t) => !catById[t.categoryId])
+          : active.filter((t) => t.categoryId === filter);
 
   const remaining = visibleTodos.filter((t) => !isDone(t)).length;
-  const hasUncategorized = todos.some((t) => !catById[t.categoryId]);
+  const hasUncategorized = active.some((t) => !catById[t.categoryId]);
 
   const sortTodos = (list) =>
     [...list].sort((a, b) => isDone(a) - isDone(b) || b.createdAt - a.createdAt);
 
+  const makeSection = (key, title, color, list) => ({
+    key,
+    title,
+    color,
+    total: list.length,
+    doneCount: list.filter(isDone).length,
+    data: collapsed[key] ? [] : sortTodos(list),
+  });
+
   const sections = useMemo(() => {
+    if (filter === 'archived') return [makeSection('archived', '완료', C.green, archived)];
     if (filter !== 'all') {
       const title = filter === 'none' ? '미분류' : (catById[filter]?.name ?? '');
-      return [
-        {
-          key: String(filter),
-          title,
-          color: catById[filter]?.color ?? null,
-          data: sortTodos(visibleTodos),
-        },
-      ];
+      return [makeSection(String(filter), title, catById[filter]?.color ?? null, visibleTodos)];
     }
-    const secs = categories.map((c) => ({
-      key: c.id,
-      title: c.name,
-      color: c.color,
-      data: sortTodos(todos.filter((t) => t.categoryId === c.id)),
-    }));
-    const none = sortTodos(todos.filter((t) => !catById[t.categoryId]));
-    if (none.length) secs.push({ key: 'none', title: '미분류', color: null, data: none });
-    return secs.filter((sec) => sec.data.length > 0);
-  }, [todos, categories, filter, catById]);
+    const secs = categories.map((c) =>
+      makeSection(c.id, c.name, c.color, active.filter((t) => t.categoryId === c.id)),
+    );
+    const none = active.filter((t) => !catById[t.categoryId]);
+    if (none.length) secs.push(makeSection('none', '미분류', null, none));
+    const nonEmpty = secs.filter((sec) => sec.total > 0);
+    if (archived.length) nonEmpty.push(makeSection('archived', '완료', C.green, archived));
+    return nonEmpty;
+  }, [todos, categories, filter, catById, collapsed]);
 
   // ---- 할 일
   const addTodo = () => {
@@ -98,6 +105,8 @@ export default function App() {
           categoryId,
           totalSteps: newSteps,
           doneSteps: 0,
+          steps: Array.from({ length: newSteps }, () => ({ text: '', attachment: null })),
+          archived: false,
           createdAt: Date.now(),
         },
         ...d.todos,
@@ -114,13 +123,21 @@ export default function App() {
       ),
     }));
 
+  const setArchived = (id, value) =>
+    setData((d) => ({
+      ...d,
+      todos: d.todos.map((t) => (t.id === id ? { ...t, archived: value } : t)),
+    }));
+
   const updateTodo = (id, fields) => {
     setData((d) => ({
       ...d,
       todos: d.todos.map((t) => {
         if (t.id !== id) return t;
         const merged = { ...t, ...fields };
+        merged.totalSteps = merged.steps.length;
         merged.doneSteps = Math.min(merged.doneSteps, merged.totalSteps);
+        if (!isDone(merged)) merged.archived = false;
         return merged;
       }),
     }));
@@ -154,6 +171,7 @@ export default function App() {
 
   const deleteCategory = (id) => {
     setData((d) => ({
+      ...d,
       todos: d.todos.map((t) => (t.categoryId === id ? { ...t, categoryId: null } : t)),
       categories: d.categories.filter((c) => c.id !== id),
     }));
@@ -161,17 +179,22 @@ export default function App() {
     if (newCat === id) setNewCat(null);
   };
 
+  const toggleCollapse = (key) =>
+    setData((d) => ({ ...d, collapsed: { ...d.collapsed, [key]: !d.collapsed[key] } }));
+
   const selectFilter = (f) => {
     setFilter(f);
-    setNewCat(f !== 'all' && f !== 'none' ? f : null);
+    setNewCat(f !== 'all' && f !== 'none' && f !== 'archived' ? f : null);
   };
 
   const bubbleMessage =
-    visibleTodos.length === 0
-      ? '오늘은 뭘 해볼까요? 꽥!'
-      : remaining === 0
-        ? '전부 부화 완료! 최고예요 꽥꽥 🎉'
-        : `알이 ${remaining}개 남았어요, 꽥!`;
+    filter === 'archived'
+      ? `지금까지 ${archived.length}마리 부화했어요, 꽥!`
+      : visibleTodos.length === 0
+        ? '오늘은 뭘 해볼까요? 꽥!'
+        : remaining === 0
+          ? '전부 부화 완료! 최고예요 꽥꽥 🎉'
+          : `알이 ${remaining}개 남았어요, 꽥!`;
 
   const editingTodo = editingId ? todos.find((t) => t.id === editingId) : null;
 
@@ -227,6 +250,15 @@ export default function App() {
                 onPress={() => selectFilter('none')}
               />
             )}
+            {archived.length > 0 && (
+              <Chip
+                testID="filter-archived"
+                label="완료"
+                color={C.green}
+                active={filter === 'archived'}
+                onPress={() => selectFilter('archived')}
+              />
+            )}
           </ScrollView>
         </View>
 
@@ -247,52 +279,91 @@ export default function App() {
             </View>
           }
           renderSectionHeader={({ section }) => (
-            <View style={styles.sectionHeader}>
+            <Pressable
+              testID={`section-${section.title}`}
+              style={styles.sectionHeader}
+              onPress={() => toggleCollapse(section.key)}
+            >
+              <Text style={styles.collapseArrow}>
+                {collapsed[section.key] ? '▸' : '▾'}
+              </Text>
               {section.color ? (
                 <View style={[styles.sectionDot, { backgroundColor: section.color }]} />
               ) : null}
               <Text style={styles.sectionTitle}>{section.title}</Text>
               <Text style={styles.sectionCount}>
-                {section.data.filter(isDone).length}/{section.data.length}
+                {section.doneCount}/{section.total}
               </Text>
-            </View>
-          )}
-          renderItem={({ item }) => (
-            <Pressable style={styles.row} onPress={() => setEditingId(item.id)}>
-              <EggIcon total={item.totalSteps} done={item.doneSteps} />
-              <View style={styles.rowBody}>
-                <Text style={[styles.rowText, isDone(item) && styles.rowTextDone]}>
-                  {item.title}
-                </Text>
-                {item.totalSteps > 1 && (
-                  <View style={styles.progressRow}>
-                    {Array.from({ length: item.totalSteps }, (_, i) => (
-                      <View
-                        key={i}
-                        style={[
-                          styles.progressDot,
-                          i < item.doneSteps && styles.progressDotDone,
-                        ]}
-                      />
-                    ))}
-                    <Text style={styles.progressText}>
-                      {item.doneSteps}/{item.totalSteps} 단계
-                    </Text>
-                  </View>
-                )}
-              </View>
-              {!isDone(item) && (
-                <Pressable
-                  accessibilityLabel="다음 단계"
-                  style={styles.nextBtn}
-                  onPress={() => advance(item.id)}
-                  hitSlop={6}
-                >
-                  <Text style={styles.nextBtnText}>❯</Text>
-                </Pressable>
-              )}
             </Pressable>
           )}
+          renderItem={({ item }) => {
+            const current = !isDone(item) ? item.steps?.[item.doneSteps] : null;
+            return (
+              <Pressable style={styles.row} onPress={() => setEditingId(item.id)}>
+                <EggIcon total={item.totalSteps} done={item.doneSteps} />
+                <View style={styles.rowBody}>
+                  <Text style={[styles.rowText, isDone(item) && styles.rowTextDone]}>
+                    {item.title}
+                  </Text>
+                  {(item.totalSteps > 1 || current?.text) && !isDone(item) && (
+                    <View style={styles.progressRow}>
+                      {item.totalSteps > 1 && (
+                        <>
+                          {Array.from({ length: item.totalSteps }, (_, i) => (
+                            <View
+                              key={i}
+                              style={[
+                                styles.progressDot,
+                                i < item.doneSteps && styles.progressDotDone,
+                              ]}
+                            />
+                          ))}
+                          <Text style={styles.progressText}>
+                            {item.doneSteps}/{item.totalSteps} 단계
+                          </Text>
+                        </>
+                      )}
+                      {current?.text ? (
+                        <Text style={styles.stepHint} numberOfLines={1}>
+                          {item.totalSteps > 1 ? ' · ' : ''}
+                          {current.text}
+                          {current.attachment ? ' 📎' : ''}
+                        </Text>
+                      ) : null}
+                    </View>
+                  )}
+                </View>
+                {!isDone(item) ? (
+                  <Pressable
+                    accessibilityLabel="다음 단계"
+                    style={styles.nextBtn}
+                    onPress={() => advance(item.id)}
+                    hitSlop={6}
+                  >
+                    <Text style={styles.nextBtnText}>❯</Text>
+                  </Pressable>
+                ) : !item.archived ? (
+                  <Pressable
+                    accessibilityLabel="완료로 보내기"
+                    style={styles.archiveBtn}
+                    onPress={() => setArchived(item.id, true)}
+                    hitSlop={6}
+                  >
+                    <Text style={styles.nextBtnText}>✓</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    accessibilityLabel="되돌리기"
+                    style={styles.unarchiveBtn}
+                    onPress={() => setArchived(item.id, false)}
+                    hitSlop={6}
+                  >
+                    <Text style={styles.unarchiveBtnText}>↩</Text>
+                  </Pressable>
+                )}
+              </Pressable>
+            );
+          }}
         />
 
         <View style={styles.inputArea}>
@@ -364,7 +435,7 @@ export default function App() {
           onAddCategory={addCategory}
           onRenameCategory={renameCategory}
           onDeleteCategory={deleteCategory}
-          onImport={(d) => setData(d)}
+          onImport={(d) => setData(normalizeData(d))}
           onClose={() => setMenuOpen(false)}
         />
       )}
@@ -458,6 +529,12 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 2,
     paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  collapseArrow: {
+    width: 16,
+    fontSize: 13,
+    color: C.faint,
   },
   sectionDot: {
     width: 10,
@@ -537,6 +614,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: C.faint,
   },
+  stepHint: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '600',
+    color: C.faint,
+  },
   nextBtn: {
     width: 36,
     height: 36,
@@ -545,6 +628,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 8,
+  },
+  archiveBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: C.green,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  unarchiveBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: C.card,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  unarchiveBtnText: {
+    color: C.sub,
+    fontSize: 15,
+    fontWeight: '800',
   },
   nextBtnText: {
     color: '#FFFFFF',
