@@ -1,0 +1,52 @@
+name: Build unsigned iOS ipa
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate native iOS project
+        run: npx expo prebuild --platform ios
+
+      - name: Build unsigned archive
+        run: |
+          WORKSPACE=$(ls ios/*.xcworkspace | head -n 1)
+          SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+          xcodebuild -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath ios/build/app.xcarchive \
+            archive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM=""
+
+      - name: Package ipa
+        run: |
+          mkdir -p ios/build/Payload
+          cp -R ios/build/app.xcarchive/Products/Applications/*.app ios/build/Payload/
+          cd ios/build
+          zip -qry my-first-app-unsigned.ipa Payload
+
+      - name: Upload ipa artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: my-first-app-ipa
+          path: ios/build/my-first-app-unsigned.ipa
+          retention-days: 30
