@@ -45,6 +45,13 @@ export default function App() {
 
   const remaining = todos.filter((t) => !t.done).length;
 
+  const bubbleMessage =
+    todos.length === 0
+      ? '오늘은 뭘 해볼까요? 꽥!'
+      : remaining === 0
+        ? '전부 부화 완료! 최고예요 꽥꽥 🎉'
+        : `알이 ${remaining}개 남았어요, 꽥!`;
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
@@ -53,14 +60,14 @@ export default function App() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.header}>
-          <Text style={styles.title}>할 일</Text>
-          <Text style={styles.subtitle}>
-            {todos.length === 0
-              ? '오늘은 어떤 일을 할까요?'
-              : remaining === 0
-                ? '전부 끝냈어요! 🎉'
-                : `${remaining}개 남음`}
-          </Text>
+          <Text style={styles.mascot}>🐥</Text>
+          <View style={styles.headerText}>
+            <Text style={styles.title}>꽥! 투두</Text>
+            <View style={styles.bubble}>
+              <View style={styles.bubbleTail} />
+              <Text style={styles.bubbleText}>{bubbleMessage}</Text>
+            </View>
+          </View>
         </View>
 
         <FlatList
@@ -69,16 +76,19 @@ export default function App() {
           data={todos}
           keyExtractor={(item) => item.id}
           ListEmptyComponent={
-            <Text style={styles.empty}>
-              아직 할 일이 없어요.{'\n'}아래 입력창에서 추가해보세요.
-            </Text>
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyDuck}>🐥</Text>
+              <Text style={styles.empty}>
+                아직 할 일이 없어요.{'\n'}
+                할 일을 추가하면 알이 생기고,{'\n'}
+                끝내면 병아리로 부화해요!
+              </Text>
+            </View>
           }
           renderItem={({ item }) => (
             <View style={styles.row}>
               <Pressable style={styles.rowBody} onPress={() => toggleTodo(item.id)}>
-                <View style={[styles.check, item.done && styles.checkDone]}>
-                  {item.done && <Text style={styles.checkMark}>✓</Text>}
-                </View>
+                <Text style={styles.eggIcon}>{item.done ? '🐥' : '🥚'}</Text>
                 <Text style={[styles.rowText, item.done && styles.rowTextDone]}>
                   {item.title}
                 </Text>
@@ -100,8 +110,8 @@ export default function App() {
             value={text}
             onChangeText={setText}
             onSubmitEditing={addTodo}
-            placeholder="새 할 일 입력..."
-            placeholderTextColor="#9A9AA0"
+            placeholder="새 할 일을 꽥꽥..."
+            placeholderTextColor="#C9AE6B"
             returnKeyType="done"
           />
           <Pressable
@@ -119,25 +129,56 @@ export default function App() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#FFF6DA',
   },
   container: {
     flex: 1,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 24,
-    paddingBottom: 12,
+    paddingBottom: 14,
+  },
+  mascot: {
+    fontSize: 56,
+    marginRight: 12,
+  },
+  headerText: {
+    flex: 1,
   },
   title: {
-    fontSize: 34,
-    fontWeight: '700',
-    color: '#1C1C1E',
+    fontSize: 30,
+    fontWeight: '800',
+    color: '#5D4324',
   },
-  subtitle: {
-    marginTop: 4,
-    fontSize: 15,
-    color: '#8E8E93',
+  bubble: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#FFE29A',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  bubbleTail: {
+    position: 'absolute',
+    left: -7,
+    top: 12,
+    width: 12,
+    height: 12,
+    backgroundColor: '#FFFFFF',
+    borderLeftWidth: 1.5,
+    borderBottomWidth: 1.5,
+    borderColor: '#FFE29A',
+    transform: [{ rotate: '45deg' }],
+  },
+  bubbleText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#8A6B3A',
   },
   list: {
     flex: 1,
@@ -146,53 +187,47 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
   },
+  emptyBox: {
+    alignItems: 'center',
+    marginTop: 70,
+  },
+  emptyDuck: {
+    fontSize: 64,
+    marginBottom: 14,
+  },
   empty: {
-    marginTop: 80,
     textAlign: 'center',
     fontSize: 15,
     lineHeight: 24,
-    color: '#AEAEB2',
+    color: '#B99C5F',
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingVertical: 14,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: '#FFE9A8',
+    paddingVertical: 13,
     paddingHorizontal: 14,
-    marginTop: 8,
+    marginTop: 10,
   },
   rowBody: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
   },
-  check: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#C7C7CC',
-    alignItems: 'center',
-    justifyContent: 'center',
+  eggIcon: {
+    fontSize: 24,
     marginRight: 12,
-  },
-  checkDone: {
-    backgroundColor: '#34C759',
-    borderColor: '#34C759',
-  },
-  checkMark: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
   },
   rowText: {
     flex: 1,
     fontSize: 16,
-    color: '#1C1C1E',
+    color: '#5D4324',
   },
   rowTextDone: {
-    color: '#AEAEB2',
+    color: '#C9B37E',
     textDecorationLine: 'line-through',
   },
   deleteBtn: {
@@ -200,42 +235,42 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   deleteText: {
-    fontSize: 16,
-    color: '#C7C7CC',
+    fontSize: 15,
+    color: '#E0C98F',
   },
   inputBar: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#D1D1D6',
+    backgroundColor: '#FFFDF5',
+    borderTopWidth: 1.5,
+    borderTopColor: '#FFE9A8',
   },
   input: {
     flex: 1,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: '#F2F2F7',
-    paddingHorizontal: 14,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#FFF3CC',
+    paddingHorizontal: 18,
     fontSize: 16,
-    color: '#1C1C1E',
+    color: '#5D4324',
   },
   addBtn: {
     marginLeft: 10,
-    height: 44,
-    paddingHorizontal: 18,
-    borderRadius: 10,
-    backgroundColor: '#007AFF',
+    height: 46,
+    paddingHorizontal: 20,
+    borderRadius: 23,
+    backgroundColor: '#FF9E2C',
     alignItems: 'center',
     justifyContent: 'center',
   },
   addBtnDisabled: {
-    backgroundColor: '#B5D6FB',
+    backgroundColor: '#FFD8A6',
   },
   addBtnText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });
