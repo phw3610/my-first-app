@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { exportBackup, pickBackup } from './backup';
+import Chip from './Chip';
 import { C } from './theme';
 
 export default function MenuModal({
@@ -16,6 +17,8 @@ export default function MenuModal({
   onAddCategory,
   onRenameCategory,
   onDeleteCategory,
+  onDeleteTemplate,
+  onUpdateSettings,
   onImport,
   onClose,
 }) {
@@ -24,6 +27,20 @@ export default function MenuModal({
   const [editName, setEditName] = useState('');
   const [pending, setPending] = useState(null);
   const [msg, setMsg] = useState('');
+  const [cleanText, setCleanText] = useState('');
+
+  const settings = data.settings ?? {};
+
+  const applyCustomClean = () => {
+    const n = Number(cleanText.trim());
+    if (!Number.isInteger(n) || n < 1 || n > 3650) {
+      setMsg('자동 정리 일수는 1~3650 사이 숫자로 입력해주세요');
+      return;
+    }
+    setMsg('');
+    setCleanText('');
+    onUpdateSettings({ autoCleanDays: n });
+  };
 
   const addCategory = () => {
     const name = newName.trim();
@@ -117,6 +134,69 @@ export default function MenuModal({
               </Pressable>
             </View>
 
+            {(data.templates ?? []).length > 0 && (
+              <>
+                <Text style={s.sectionTitle}>서식 관리</Text>
+                {data.templates.map((tpl) => (
+                  <View key={tpl.id} style={s.catRow}>
+                    <Text style={s.catName}>📋 {tpl.title}</Text>
+                    <Pressable style={s.smallGhostBtn} onPress={() => onDeleteTemplate(tpl.id)}>
+                      <Text style={s.smallDangerText}>삭제</Text>
+                    </Pressable>
+                  </View>
+                ))}
+              </>
+            )}
+
+            <Text style={s.sectionTitle}>정렬</Text>
+            <View style={s.chipRow}>
+              <Chip
+                label="수동 (드래그)"
+                active={(settings.sortMode ?? 'manual') === 'manual'}
+                onPress={() => onUpdateSettings({ sortMode: 'manual' })}
+              />
+              <Chip
+                label="마감일순"
+                active={settings.sortMode === 'due'}
+                onPress={() => onUpdateSettings({ sortMode: 'due' })}
+              />
+            </View>
+
+            <Text style={s.sectionTitle}>완료 자동 정리</Text>
+            <Text style={s.hint}>
+              완료로 보낸 뒤 설정한 일수가 지난 할 일을 앱을 열 때 자동으로 삭제해요.
+              {settings.autoCleanDays ? ` (현재: ${settings.autoCleanDays}일)` : ' (현재: 끔)'}
+            </Text>
+            <View style={s.chipRow}>
+              <Chip
+                label="끄기"
+                active={!settings.autoCleanDays}
+                onPress={() => onUpdateSettings({ autoCleanDays: null })}
+              />
+              {[30, 60, 90].map((n) => (
+                <Chip
+                  key={n}
+                  label={`${n}일`}
+                  active={settings.autoCleanDays === n}
+                  onPress={() => onUpdateSettings({ autoCleanDays: n })}
+                />
+              ))}
+            </View>
+            <View style={s.catRow}>
+              <TextInput
+                style={s.catEditInput}
+                value={cleanText}
+                onChangeText={setCleanText}
+                onSubmitEditing={applyCustomClean}
+                placeholder="직접 입력 (일수)"
+                placeholderTextColor={C.faint}
+                keyboardType="number-pad"
+              />
+              <Pressable style={s.smallBtn} onPress={applyCustomClean}>
+                <Text style={s.smallBtnText}>적용</Text>
+              </Pressable>
+            </View>
+
             <Text style={s.sectionTitle}>데이터 백업</Text>
             <Text style={s.hint}>
               파일로 내보낸 뒤 iCloud Drive에 저장하면 안전하게 보관돼요. 다른 폰에서도
@@ -202,6 +282,11 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 7,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    rowGap: 6,
   },
   dot: {
     width: 10,

@@ -36,6 +36,19 @@ export async function scheduleReminder(title, date) {
   });
 }
 
+// 남은 알 개수를 앱 아이콘 배지로 (알림 권한이 이미 있을 때만, 권한 팝업 없이)
+export async function updateBadge(count) {
+  const Notifications = getNotifications();
+  if (!Notifications) return;
+  try {
+    const p = await Notifications.getPermissionsAsync();
+    if (!p.granted) return;
+    await Notifications.setBadgeCountAsync(count);
+  } catch (e) {
+    // 배지 실패는 무시
+  }
+}
+
 export async function cancelReminder(notificationId) {
   if (!notificationId) return;
   const Notifications = getNotifications();

@@ -3,7 +3,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const KEY = 'quack-data-v2';
 const OLD_KEY = 'todos-v1';
 
-export const emptyData = { todos: [], categories: [], collapsed: {} };
+export const emptyData = {
+  todos: [],
+  categories: [],
+  collapsed: {},
+  templates: [],
+  settings: { sortMode: 'manual', autoCleanDays: null },
+};
 
 function normalizeStep(s) {
   const attachments = Array.isArray(s.attachments)
@@ -23,6 +29,7 @@ export function normalizeTodo(t) {
   const timeline = Array.isArray(t.timeline) ? t.timeline : [];
   return {
     archived: false,
+    archivedAt: null,
     reminder: null,
     repeat: null,
     dueDate: null,
@@ -34,6 +41,31 @@ export function normalizeTodo(t) {
   };
 }
 
+// 완료 보관함 자동 정리: archivedAt이 없으면 지금으로 찍고(유예),
+// 설정된 일수보다 오래된 완료 항목은 삭제한다.
+export function cleanArchived(data) {
+  const days = data.settings?.autoCleanDays;
+  let changed = false;
+  let todos = data.todos.map((t) => {
+    if (t.archived && !t.archivedAt) {
+      changed = true;
+      return { ...t, archivedAt: new Date().toISOString() };
+    }
+    return t;
+  });
+  if (days) {
+    const cutoff = Date.now() - days * 86400000;
+    const kept = todos.filter(
+      (t) => !(t.archived && t.archivedAt && new Date(t.archivedAt).getTime() < cutoff),
+    );
+    if (kept.length !== todos.length) {
+      changed = true;
+      todos = kept;
+    }
+  }
+  return changed ? { ...data, todos } : null;
+}
+
 export function normalizeData(data) {
   return {
     ...emptyData,
@@ -41,6 +73,8 @@ export function normalizeData(data) {
     todos: (data.todos ?? []).map(normalizeTodo),
     categories: data.categories ?? [],
     collapsed: data.collapsed ?? {},
+    templates: data.templates ?? [],
+    settings: { ...emptyData.settings, ...data.settings },
   };
 }
 

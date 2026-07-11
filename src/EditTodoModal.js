@@ -31,7 +31,14 @@ const fmtReminder = (iso) => {
   return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-export default function EditTodoModal({ todo, categories, onSave, onDelete, onClose }) {
+export default function EditTodoModal({
+  todo,
+  categories,
+  onSave,
+  onSaveTemplate,
+  onDelete,
+  onClose,
+}) {
   const [title, setTitle] = useState(todo.title);
   const [categoryId, setCategoryId] = useState(todo.categoryId);
   const [steps, setSteps] = useState(resizeSteps(todo.steps ?? [], todo.totalSteps));
@@ -362,6 +369,20 @@ export default function EditTodoModal({ todo, categories, onSave, onDelete, onCl
               </View>
             )}
 
+            <Pressable
+              style={s.templateBtn}
+              onPress={() => {
+                onSaveTemplate({
+                  title: title.trim() || todo.title,
+                  categoryId,
+                  stepTexts: steps.map((st) => st.text),
+                });
+                setMsg('서식으로 저장했어요! 입력창을 탭하면 서식 줄이 나타나요, 꽥!');
+              }}
+            >
+              <Text style={s.templateBtnText}>📋 이 할 일을 서식으로 저장</Text>
+            </Pressable>
+
             {!!msg && <Text style={s.msg}>{msg}</Text>}
 
             <View style={s.actions}>
@@ -607,6 +628,20 @@ const s = StyleSheet.create({
     color: C.danger,
     fontWeight: '700',
     fontSize: 13,
+  },
+  templateBtn: {
+    marginTop: 18,
+    backgroundColor: C.card,
+    borderWidth: 1.5,
+    borderColor: C.borderStrong,
+    borderRadius: 12,
+    paddingVertical: 11,
+    alignItems: 'center',
+  },
+  templateBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.sub,
   },
   msg: {
     marginTop: 8,

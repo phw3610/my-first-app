@@ -29,7 +29,7 @@ export function spawnRepeats(data) {
       lastSpawnedDate: today,
       steps: t.steps.map((s) => ({ text: s.text, attachments: s.attachments })),
     });
-    return { ...t, repeat: null, archived: true };
+    return { ...t, repeat: null, archived: true, archivedAt: new Date().toISOString() };
   });
 
   if (spawned.length === 0) return null;
