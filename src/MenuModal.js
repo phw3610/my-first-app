@@ -17,6 +17,9 @@ export default function MenuModal({
   onAddCategory,
   onRenameCategory,
   onDeleteCategory,
+  onAddPage,
+  onRenamePage,
+  onDeletePage,
   onDeleteTemplate,
   onUpdateSettings,
   onImport,
@@ -25,6 +28,9 @@ export default function MenuModal({
   const [newName, setNewName] = useState('');
   const [editId, setEditId] = useState(null);
   const [editName, setEditName] = useState('');
+  const [newPageName, setNewPageName] = useState('');
+  const [editPageId, setEditPageId] = useState(null);
+  const [editPageName, setEditPageName] = useState('');
   const [pending, setPending] = useState(null);
   const [msg, setMsg] = useState('');
   const [cleanText, setCleanText] = useState('');
@@ -47,6 +53,13 @@ export default function MenuModal({
     if (!name) return;
     onAddCategory(name);
     setNewName('');
+  };
+
+  const addPage = () => {
+    const name = newPageName.trim();
+    if (!name) return;
+    onAddPage(name);
+    setNewPageName('');
   };
 
   const doExport = async () => {
@@ -77,6 +90,63 @@ export default function MenuModal({
           <ScrollView>
             <Text style={s.heading}>메뉴 🐥</Text>
             <Text style={s.hint}>왼쪽 위 오리를 누르면 하루보기로 전환돼요!</Text>
+
+            <Text style={s.sectionTitle}>페이지 관리</Text>
+            <Text style={s.hint}>
+              제목 부분을 좌우로 쓸거나 점(●)을 눌러 페이지를 오갈 수 있어요.
+            </Text>
+            {(data.pages ?? []).map((p) =>
+              editPageId === p.id ? (
+                <View key={p.id} style={s.catRow}>
+                  <TextInput
+                    style={s.catEditInput}
+                    value={editPageName}
+                    onChangeText={setEditPageName}
+                    autoFocus
+                  />
+                  <Pressable
+                    style={s.smallBtn}
+                    onPress={() => {
+                      if (editPageName.trim()) onRenamePage(p.id, editPageName.trim());
+                      setEditPageId(null);
+                    }}
+                  >
+                    <Text style={s.smallBtnText}>저장</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <View key={p.id} style={s.catRow}>
+                  <Text style={s.catName}>📄 {p.name}</Text>
+                  <Pressable
+                    style={s.smallGhostBtn}
+                    onPress={() => {
+                      setEditPageId(p.id);
+                      setEditPageName(p.name);
+                    }}
+                  >
+                    <Text style={s.smallGhostText}>수정</Text>
+                  </Pressable>
+                  {data.pages.length > 1 && (
+                    <Pressable style={s.smallGhostBtn} onPress={() => onDeletePage(p.id)}>
+                      <Text style={s.smallDangerText}>삭제</Text>
+                    </Pressable>
+                  )}
+                </View>
+              ),
+            )}
+            <View style={s.catRow}>
+              <TextInput
+                style={s.catEditInput}
+                value={newPageName}
+                onChangeText={setNewPageName}
+                onSubmitEditing={addPage}
+                placeholder="새 페이지 이름"
+                placeholderTextColor={C.faint}
+              />
+              <Pressable testID="page-add-btn" style={s.smallBtn} onPress={addPage}>
+                <Text style={s.smallBtnText}>추가</Text>
+              </Pressable>
+            </View>
 
             <Text style={s.sectionTitle}>분류 관리</Text>
             {data.categories.length === 0 && (

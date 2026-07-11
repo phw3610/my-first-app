@@ -1,7 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated,
   KeyboardAvoidingView,
   PanResponder,
   Platform,
@@ -16,200 +15,14 @@ import {
 import Chip from './src/Chip';
 import DayView from './src/DayView';
 import EditTodoModal from './src/EditTodoModal';
-import EggIcon from './src/EggIcon';
 import MenuModal from './src/MenuModal';
-import { hapticHatch, hapticStep } from './src/haptics';
+import TodoRow from './src/TodoRow';
+import { hapticStep } from './src/haptics';
 import { cancelReminder, scheduleReminder, updateBadge } from './src/notifications';
-import { dateStr, spawnRepeats } from './src/repeat';
+import { spawnRepeats } from './src/repeat';
 import { cleanArchived, emptyData, loadData, normalizeData, saveData } from './src/storage';
 import { C, CATEGORY_COLORS, isDark } from './src/theme';
-
-const isDone = (t) => t.doneSteps >= t.totalSteps;
-const isStarted = (t) => (t.timeline?.length ?? 0) > 0 || t.doneSteps > 0;
-
-const fmtReminderShort = (iso) => {
-  const d = new Date(iso);
-  const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  return dateStr(d) === dateStr() ? hm : `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
-};
-
-function TodoRow({
-  item,
-  isDragging,
-  sortLocked,
-  onLayout,
-  onEdit,
-  onStartDrag,
-  onPressOut,
-  onAdvance,
-  onSetArchived,
-}) {
-  const translateX = useRef(new Animated.Value(0)).current;
-  const eggScale = useRef(new Animated.Value(1)).current;
-  const itemRef = useRef(item);
-  itemRef.current = item;
-  const done = isDone(item);
-  const prevDone = useRef(done);
-  const swipingRef = useRef(false);
-  const lastSwipeAt = useRef(0);
-
-  // 부화 순간: 햅틱 + 알이 통통 튀는 애니메이션
-  useEffect(() => {
-    if (done && !prevDone.current) {
-      hapticHatch();
-      Animated.sequence([
-        Animated.spring(eggScale, {
-          toValue: 1.7,
-          speed: 24,
-          bounciness: 16,
-          useNativeDriver: true,
-        }),
-        Animated.spring(eggScale, { toValue: 1, useNativeDriver: true }),
-      ]).start();
-    }
-    prevDone.current = done;
-  }, [done]);
-
-  // 좌우 스와이프: 오른쪽 = 다음 단계, 왼쪽 = 완료 보내기/되돌리기
-  const swipe = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) =>
-        Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 1.6,
-      onPanResponderMove: (_, g) => {
-        swipingRef.current = true;
-        translateX.setValue(Math.max(-100, Math.min(100, g.dx)));
-      },
-      onPanResponderRelease: (_, g) => {
-        const t = itemRef.current;
-        if (g.dx > 70 && !isDone(t)) onAdvance(t.id);
-        else if (g.dx < -70) {
-          if (isDone(t) && !t.archived) onSetArchived(t.id, true);
-          else if (t.archived) onSetArchived(t.id, false);
-        }
-        swipingRef.current = false;
-        lastSwipeAt.current = Date.now();
-        Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
-      },
-      onPanResponderTerminate: () => {
-        swipingRef.current = false;
-        lastSwipeAt.current = Date.now();
-        Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
-      },
-    }),
-  ).current;
-
-  // 스와이프 직후의 탭/롱프레스 오인식 방지
-  const guardedEdit = () => {
-    if (swipingRef.current || Date.now() - lastSwipeAt.current < 400) return;
-    onEdit();
-  };
-  const guardedDrag = () => {
-    if (swipingRef.current || Date.now() - lastSwipeAt.current < 400) return;
-    onStartDrag();
-  };
-
-  const current = !done ? item.steps?.[item.doneSteps] : null;
-  const overdue = item.dueDate && item.dueDate < dateStr() && !done;
-  const remLabel = item.reminder?.at ? fmtReminderShort(item.reminder.at) : null;
-  const hasMeta =
-    item.totalSteps > 1 ||
-    current?.text ||
-    current?.attachments?.length ||
-    item.dueDate ||
-    remLabel;
-
-  return (
-    <Animated.View
-      onLayout={onLayout}
-      {...swipe.panHandlers}
-      style={[
-        styles.row,
-        isDragging && styles.rowDragging,
-        { transform: [{ translateX }] },
-      ]}
-    >
-      <Pressable
-        style={styles.rowInner}
-        onPress={guardedEdit}
-        onLongPress={sortLocked ? undefined : guardedDrag}
-        onPressOut={onPressOut}
-        delayLongPress={220}
-      >
-        <Animated.View style={{ transform: [{ scale: eggScale }] }}>
-          <EggIcon total={item.totalSteps} done={item.doneSteps} />
-        </Animated.View>
-        <View style={styles.rowBody}>
-          <Text style={[styles.rowText, done && styles.rowTextDone]}>
-            {item.title}
-            {item.repeat ? ' 🔁' : ''}
-          </Text>
-          {hasMeta && !done && (
-            <View style={styles.progressRow}>
-              {item.dueDate && (
-                <Text style={[styles.dueBadge, overdue && styles.dueBadgeOver]}>
-                  📅 {Number(item.dueDate.slice(5, 7))}/{Number(item.dueDate.slice(8, 10))}
-                  {overdue ? ' 지남!' : ''}
-                </Text>
-              )}
-              {remLabel && <Text style={styles.dueBadge}>⏰ {remLabel}</Text>}
-              {item.totalSteps > 1 && (
-                <>
-                  {Array.from({ length: item.totalSteps }, (_, i) => (
-                    <View
-                      key={i}
-                      style={[
-                        styles.progressDot,
-                        i < item.doneSteps && styles.progressDotDone,
-                      ]}
-                    />
-                  ))}
-                  <Text style={styles.progressText}>
-                    {item.doneSteps}/{item.totalSteps} 단계
-                  </Text>
-                </>
-              )}
-              {current?.text || current?.attachments?.length ? (
-                <Text style={styles.stepHint} numberOfLines={1}>
-                  {item.totalSteps > 1 || item.dueDate || remLabel ? ' · ' : ''}
-                  {current.text}
-                  {current.attachments?.length ? ` 📎${current.attachments.length}` : ''}
-                </Text>
-              ) : null}
-            </View>
-          )}
-        </View>
-      </Pressable>
-      {!done ? (
-        <Pressable
-          accessibilityLabel="다음 단계"
-          style={styles.nextBtn}
-          onPress={() => onAdvance(item.id)}
-          hitSlop={6}
-        >
-          <Text style={styles.nextBtnText}>{isStarted(item) ? '❯' : '▶'}</Text>
-        </Pressable>
-      ) : !item.archived ? (
-        <Pressable
-          accessibilityLabel="완료로 보내기"
-          style={styles.archiveBtn}
-          onPress={() => onSetArchived(item.id, true)}
-          hitSlop={6}
-        >
-          <Text style={styles.nextBtnText}>✓</Text>
-        </Pressable>
-      ) : (
-        <Pressable
-          accessibilityLabel="되돌리기"
-          style={styles.unarchiveBtn}
-          onPress={() => onSetArchived(item.id, false)}
-          hitSlop={6}
-        >
-          <Text style={styles.unarchiveBtnText}>↩</Text>
-        </Pressable>
-      )}
-    </Animated.View>
-  );
-}
+import { isDone, isStarted } from './src/utils';
 
 export default function App() {
   const [data, setData] = useState(emptyData);
@@ -263,10 +76,40 @@ export default function App() {
     updateBadge(data.todos.filter((t) => !t.archived && !isDone(t)).length);
   }, [data, loaded]);
 
-  const { todos, categories, collapsed, templates } = data;
+  const { todos, categories, collapsed, templates, pages } = data;
   collapsedRef.current = collapsed;
   const sortMode = data.settings?.sortMode ?? 'manual';
   const isCollapsed = (key) => collapsed[key] ?? key === 'archived';
+
+  // ---- 페이지
+  const currentPageId =
+    data.settings?.lastPageId && pages.some((p) => p.id === data.settings.lastPageId)
+      ? data.settings.lastPageId
+      : pages[0].id;
+  const pageIndex = pages.findIndex((p) => p.id === currentPageId);
+  const currentPage = pages[pageIndex];
+  const pagesRef = useRef({ pages, pageIndex });
+  pagesRef.current = { pages, pageIndex };
+
+  const selectPage = (i) => {
+    const { pages: ps } = pagesRef.current;
+    if (i < 0 || i >= ps.length) return;
+    hapticStep();
+    setData((d) => ({ ...d, settings: { ...d.settings, lastPageId: ps[i].id } }));
+  };
+
+  // 헤더(제목 영역)를 좌우로 쓸면 페이지 전환
+  const headerPan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) =>
+        Math.abs(g.dx) > 24 && Math.abs(g.dx) > Math.abs(g.dy) * 1.6,
+      onPanResponderRelease: (_, g) => {
+        const { pageIndex: i } = pagesRef.current;
+        if (g.dx < -50) selectPage(i + 1);
+        else if (g.dx > 50) selectPage(i - 1);
+      },
+    }),
+  ).current;
 
   const catById = useMemo(
     () => Object.fromEntries(categories.map((c) => [c.id, c])),
@@ -279,8 +122,9 @@ export default function App() {
     t.title.toLowerCase().includes(q) ||
     t.steps?.some((s) => s.text?.toLowerCase().includes(q));
 
-  const active = todos.filter((t) => !t.archived && matchesQuery(t));
-  const archived = todos.filter((t) => t.archived && matchesQuery(t));
+  const pageTodos = todos.filter((t) => t.pageId === currentPageId);
+  const active = pageTodos.filter((t) => !t.archived && matchesQuery(t));
+  const archived = pageTodos.filter((t) => t.archived && matchesQuery(t));
 
   const visibleTodos =
     filter === 'all'
@@ -328,7 +172,7 @@ export default function App() {
     const nonEmpty = secs.filter((sec) => sec.total > 0);
     if (archived.length) nonEmpty.push(make('archived', '완료', C.green, archived));
     return nonEmpty;
-  }, [todos, categories, filter, catById, q, sortMode]);
+  }, [todos, categories, filter, catById, q, sortMode, currentPageId]);
   sectionsRef.current = sections;
 
   // ---- 드래그 앤 드롭
@@ -430,6 +274,7 @@ export default function App() {
     id: Date.now().toString(),
     title,
     categoryId,
+    pageId: currentPageId,
     totalSteps: stepTexts.length,
     doneSteps: 0,
     steps: stepTexts.map((t) => ({ text: t, attachments: [] })),
@@ -476,6 +321,31 @@ export default function App() {
 
   const updateSettings = (patch) =>
     setData((d) => ({ ...d, settings: { ...d.settings, ...patch } }));
+
+  const addPage = (name) =>
+    setData((d) => ({ ...d, pages: [...d.pages, { id: 'p' + Date.now(), name }] }));
+
+  const renamePage = (id, name) =>
+    setData((d) => ({
+      ...d,
+      pages: d.pages.map((p) => (p.id === id ? { ...p, name } : p)),
+    }));
+
+  // 페이지 삭제 시 소속 투두는 남은 첫 페이지로 이동 (마지막 페이지는 삭제 불가)
+  const deletePage = (id) =>
+    setData((d) => {
+      if (d.pages.length <= 1) return d;
+      const fallback = d.pages.find((p) => p.id !== id);
+      return {
+        ...d,
+        pages: d.pages.filter((p) => p.id !== id),
+        todos: d.todos.map((t) => (t.pageId === id ? { ...t, pageId: fallback.id } : t)),
+        settings: {
+          ...d.settings,
+          lastPageId: d.settings.lastPageId === id ? fallback.id : d.settings.lastPageId,
+        },
+      };
+    });
 
   const advance = (id) => {
     hapticStep();
@@ -644,8 +514,26 @@ export default function App() {
           >
             <Text style={styles.mascot}>🐥</Text>
           </Pressable>
-          <View style={styles.headerText}>
-            <Text style={styles.title}>{page === 'day' ? '하루보기' : '꽥! 투두'}</Text>
+          <View style={styles.headerText} {...headerPan.panHandlers}>
+            <Text style={styles.title} numberOfLines={1}>
+              {page === 'day' ? '하루보기' : currentPage.name}
+            </Text>
+            {page === 'list' && pages.length > 1 && (
+              <View style={styles.dotsRow}>
+                {pages.map((p, i) => (
+                  <Pressable
+                    key={p.id}
+                    testID={`page-dot-${i}`}
+                    onPress={() => selectPage(i)}
+                    hitSlop={8}
+                  >
+                    <View
+                      style={[styles.pageDot, i === pageIndex && styles.pageDotActive]}
+                    />
+                  </Pressable>
+                ))}
+              </View>
+            )}
             <View style={styles.bubble}>
               <View style={styles.bubbleTail} />
               <Text style={styles.bubbleText}>{bubbleMessage}</Text>
@@ -662,7 +550,7 @@ export default function App() {
         </View>
 
         {page === 'day' ? (
-          <DayView todos={todos} categories={categories} />
+          <DayView todos={pageTodos} categories={categories} />
         ) : (
           <>
             <View style={styles.filterBar}>
@@ -902,6 +790,9 @@ export default function App() {
           onAddCategory={addCategory}
           onRenameCategory={renameCategory}
           onDeleteCategory={deleteCategory}
+          onAddPage={addPage}
+          onRenamePage={renamePage}
+          onDeletePage={deletePage}
           onDeleteTemplate={deleteTemplate}
           onUpdateSettings={updateSettings}
           onImport={(d) => setData(normalizeData(d))}
@@ -965,6 +856,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: C.sub,
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    marginTop: 6,
+  },
+  pageDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: C.border,
+    marginRight: 6,
+  },
+  pageDotActive: {
+    backgroundColor: C.orange,
   },
   menuBtn: {
     width: 42,
@@ -1051,25 +956,6 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     color: C.faint,
   },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: C.card,
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: C.border,
-    paddingVertical: 12,
-    paddingHorizontal: 13,
-    marginTop: 8,
-  },
-  rowInner: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  rowDragging: {
-    opacity: 0.35,
-  },
   dragGhost: {
     position: 'absolute',
     left: 16,
@@ -1090,96 +976,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: C.text,
-  },
-  rowBody: {
-    flex: 1,
-    marginLeft: 11,
-  },
-  rowText: {
-    fontSize: 16,
-    color: C.text,
-  },
-  rowTextDone: {
-    color: C.done,
-    textDecorationLine: 'line-through',
-  },
-  progressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 5,
-  },
-  progressDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 4.5,
-    backgroundColor: C.inputBg,
-    borderWidth: 1,
-    borderColor: C.border,
-    marginRight: 4,
-  },
-  progressDotDone: {
-    backgroundColor: C.orange,
-    borderColor: C.orange,
-  },
-  progressText: {
-    marginLeft: 4,
-    fontSize: 11,
-    fontWeight: '700',
-    color: C.faint,
-  },
-  stepHint: {
-    flex: 1,
-    fontSize: 11,
-    fontWeight: '600',
-    color: C.faint,
-  },
-  dueBadge: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: C.sub,
-    marginRight: 4,
-  },
-  dueBadgeOver: {
-    color: C.danger,
-  },
-  nextBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: C.orange,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 8,
-  },
-  archiveBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: C.green,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 8,
-  },
-  unarchiveBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: C.card,
-    borderWidth: 1.5,
-    borderColor: C.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 8,
-  },
-  unarchiveBtnText: {
-    color: C.sub,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  nextBtnText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '800',
   },
   inputArea: {
     backgroundColor: C.barBg,

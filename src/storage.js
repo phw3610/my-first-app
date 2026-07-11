@@ -3,12 +3,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const KEY = 'quack-data-v2';
 const OLD_KEY = 'todos-v1';
 
+export const MAIN_PAGE_ID = 'main';
+
 export const emptyData = {
   todos: [],
   categories: [],
   collapsed: {},
   templates: [],
-  settings: { sortMode: 'manual', autoCleanDays: null },
+  pages: [{ id: MAIN_PAGE_ID, name: '꽥! 투두' }],
+  settings: { sortMode: 'manual', autoCleanDays: null, lastPageId: MAIN_PAGE_ID },
 };
 
 function normalizeStep(s) {
@@ -34,6 +37,7 @@ export function normalizeTodo(t) {
     repeat: null,
     dueDate: null,
     lastSpawnedDate: null,
+    pageId: MAIN_PAGE_ID,
     ...t,
     totalSteps,
     steps,
@@ -74,6 +78,7 @@ export function normalizeData(data) {
     categories: data.categories ?? [],
     collapsed: data.collapsed ?? {},
     templates: data.templates ?? [],
+    pages: data.pages?.length ? data.pages : emptyData.pages,
     settings: { ...emptyData.settings, ...data.settings },
   };
 }
