@@ -292,8 +292,8 @@ export default function MenuModal({
                   </Pressable>
                   <Pressable
                     style={s.smallBtn}
-                    onPress={() => {
-                      onImport(pending);
+                    onPress={async () => {
+                      await onImport(pending);
                       setPending(null);
                       setMsg('백업을 불러왔어요, 꽥!');
                     }}

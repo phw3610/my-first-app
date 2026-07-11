@@ -16,7 +16,13 @@ export function spawnRepeats(data) {
       t.repeat.kind === 'daily' ||
       (t.repeat.kind === 'weekly' && (t.repeat.days ?? []).includes(dow));
     const finished = t.doneSteps >= t.totalSteps || t.archived;
-    if (!isScheduledToday || !finished || t.lastSpawnedDate === today) return t;
+    const completedAt =
+      [...(t.timeline ?? [])].reverse().find((entry) => entry.step === 'done')?.at ??
+      t.archivedAt;
+    const completedToday = completedAt && dateStr(new Date(completedAt)) === today;
+    if (!isScheduledToday || !finished || completedToday || t.lastSpawnedDate === today) {
+      return t;
+    }
 
     spawned.push({
       ...t,

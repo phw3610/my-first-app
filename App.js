@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AppState,
   KeyboardAvoidingView,
   PanResponder,
   Platform,
@@ -50,6 +51,14 @@ export default function App() {
   const sectionsRef = useRef([]);
   const collapsedRef = useRef({});
 
+  const runMaintenance = useCallback(() => {
+    setData((current) => {
+      let next = spawnRepeats(current) ?? current;
+      next = cleanArchived(next) ?? next;
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     loadData().then((d) => {
       let next = spawnRepeats(d) ?? d;
@@ -65,6 +74,30 @@ export default function App() {
       document.head.appendChild(style);
     }
   }, []);
+
+  useEffect(() => {
+    if (!loaded) return undefined;
+
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') runMaintenance();
+    });
+
+    let timer;
+    const scheduleMidnightMaintenance = () => {
+      const nextMidnight = new Date();
+      nextMidnight.setHours(24, 0, 1, 0);
+      timer = setTimeout(() => {
+        runMaintenance();
+        scheduleMidnightMaintenance();
+      }, nextMidnight.getTime() - Date.now());
+    };
+    scheduleMidnightMaintenance();
+
+    return () => {
+      subscription.remove();
+      clearTimeout(timer);
+    };
+  }, [loaded, runMaintenance]);
 
   useEffect(() => {
     if (loaded) saveData(data);
@@ -320,7 +353,10 @@ export default function App() {
     setData((d) => ({ ...d, templates: d.templates.filter((t) => t.id !== id) }));
 
   const updateSettings = (patch) =>
-    setData((d) => ({ ...d, settings: { ...d.settings, ...patch } }));
+    setData((d) => {
+      const next = { ...d, settings: { ...d.settings, ...patch } };
+      return cleanArchived(next) ?? next;
+    });
 
   const addPage = (name) =>
     setData((d) => ({ ...d, pages: [...d.pages, { id: 'p' + Date.now(), name }] }));
@@ -439,6 +475,33 @@ export default function App() {
     cancelReminder(t?.reminder?.notificationId);
     setData((d) => ({ ...d, todos: d.todos.filter((x) => x.id !== id) }));
     setEditingId(null);
+  };
+
+  const importBackup = async (rawData) => {
+    const imported = normalizeData(rawData);
+    await Promise.all(data.todos.map((t) => cancelReminder(t.reminder?.notificationId)));
+
+    const now = Date.now();
+    const todos = await Promise.all(
+      imported.todos.map(async (todo) => {
+        const reminderAt = todo.reminder?.at;
+        const reminderTime = reminderAt ? new Date(reminderAt).getTime() : NaN;
+        if (!reminderAt || !Number.isFinite(reminderTime) || reminderTime <= now) {
+          return { ...todo, reminder: null };
+        }
+
+        try {
+          const notificationId = await scheduleReminder(todo.title, new Date(reminderAt));
+          return { ...todo, reminder: { at: reminderAt, notificationId } };
+        } catch {
+          return { ...todo, reminder: { at: reminderAt, notificationId: null } };
+        }
+      }),
+    );
+
+    let next = { ...imported, todos };
+    next = cleanArchived(next) ?? next;
+    setData(next);
   };
 
   // ---- 분류
@@ -795,7 +858,7 @@ export default function App() {
           onDeletePage={deletePage}
           onDeleteTemplate={deleteTemplate}
           onUpdateSettings={updateSettings}
-          onImport={(d) => setData(normalizeData(d))}
+          onImport={importBackup}
           onClose={() => setMenuOpen(false)}
         />
       )}

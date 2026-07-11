@@ -116,14 +116,29 @@ export default function EditTodoModal({
       setMsg('마감일을 7/15 형식으로 입력해주세요');
       return;
     }
+    const month = Number(m[1]);
+    const day = Number(m[2]);
+    if (month < 1 || month > 12 || day < 1 || day > 31) {
+      setMsg('마감일을 실제 날짜로 입력해주세요');
+      return;
+    }
     const now = new Date();
     let year = now.getFullYear();
-    const candidate = new Date(year, Number(m[1]) - 1, Number(m[2]));
-    if (candidate < new Date(year, now.getMonth(), now.getDate())) year += 1;
+    let candidate = new Date(year, month - 1, day);
+    if (candidate.getMonth() !== month - 1 || candidate.getDate() !== day) {
+      setMsg('마감일을 실제 날짜로 입력해주세요');
+      return;
+    }
+    if (candidate < new Date(year, now.getMonth(), now.getDate())) {
+      year += 1;
+      candidate = new Date(year, month - 1, day);
+      if (candidate.getMonth() !== month - 1 || candidate.getDate() !== day) {
+        setMsg('마감일을 실제 날짜로 입력해주세요');
+        return;
+      }
+    }
     setMsg('');
-    setDueDate(
-      `${year}-${String(m[1]).padStart(2, '0')}-${String(m[2]).padStart(2, '0')}`,
-    );
+    setDueDate(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
     setDueText('');
   };
 
@@ -133,9 +148,15 @@ export default function EditTodoModal({
       setMsg('시간을 20:00 형식으로 입력해주세요');
       return;
     }
+    const hours = Number(m[1]);
+    const minutes = Number(m[2]);
+    if (hours > 23 || minutes > 59) {
+      setMsg('시간을 실제 시간으로 입력해주세요');
+      return;
+    }
     const d = new Date();
     if (remDay === 'tomorrow') d.setDate(d.getDate() + 1);
-    d.setHours(Number(m[1]), Number(m[2]), 0, 0);
+    d.setHours(hours, minutes, 0, 0);
     if (d.getTime() <= Date.now()) {
       setMsg('이미 지난 시간이에요');
       return;
