@@ -2,6 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppState,
+  Image,
   KeyboardAvoidingView,
   PanResponder,
   Platform,
@@ -575,13 +576,13 @@ export default function App() {
             onPress={() => setPage((p) => (p === 'day' ? 'list' : 'day'))}
             hitSlop={8}
           >
-            <Text style={styles.mascot}>🐥</Text>
+            <Image source={require('./assets/mascot.png')} style={styles.mascot} />
           </Pressable>
           <View style={styles.headerText} {...headerPan.panHandlers}>
             <Text style={styles.title} numberOfLines={1}>
               {page === 'day' ? '하루보기' : currentPage.name}
             </Text>
-            {page === 'list' && pages.length > 1 && (
+            {pages.length > 1 && (
               <View style={styles.dotsRow}>
                 {pages.map((p, i) => (
                   <Pressable
@@ -882,7 +883,8 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   mascot: {
-    fontSize: 48,
+    width: 54,
+    height: 54,
     marginRight: 12,
   },
   headerText: {

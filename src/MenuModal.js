@@ -88,9 +88,15 @@ export default function MenuModal({
       <View style={s.backdrop}>
         <View style={s.card}>
           <ScrollView>
-            <Text style={s.heading}>메뉴 🐥</Text>
+            <View style={s.headerRow}>
+              <Text style={s.heading}>메뉴 🐥</Text>
+              <Pressable testID="menu-close" style={s.xBtn} onPress={onClose} hitSlop={8}>
+                <Text style={s.xBtnText}>✕</Text>
+              </Pressable>
+            </View>
             <Text style={s.hint}>왼쪽 위 오리를 누르면 하루보기로 전환돼요!</Text>
 
+            <View style={s.section}>
             <Text style={s.sectionTitle}>페이지 관리</Text>
             <Text style={s.hint}>
               제목 부분을 좌우로 쓸거나 점(●)을 눌러 페이지를 오갈 수 있어요.
@@ -147,7 +153,9 @@ export default function MenuModal({
                 <Text style={s.smallBtnText}>추가</Text>
               </Pressable>
             </View>
+            </View>
 
+            <View style={s.section}>
             <Text style={s.sectionTitle}>분류 관리</Text>
             {data.categories.length === 0 && (
               <Text style={s.hint}>아직 분류가 없어요. 아래에서 추가해보세요!</Text>
@@ -203,9 +211,10 @@ export default function MenuModal({
                 <Text style={s.smallBtnText}>추가</Text>
               </Pressable>
             </View>
+            </View>
 
             {(data.templates ?? []).length > 0 && (
-              <>
+              <View style={s.section}>
                 <Text style={s.sectionTitle}>서식 관리</Text>
                 {data.templates.map((tpl) => (
                   <View key={tpl.id} style={s.catRow}>
@@ -215,9 +224,10 @@ export default function MenuModal({
                     </Pressable>
                   </View>
                 ))}
-              </>
+              </View>
             )}
 
+            <View style={s.section}>
             <Text style={s.sectionTitle}>정렬</Text>
             <View style={s.chipRow}>
               <Chip
@@ -231,7 +241,9 @@ export default function MenuModal({
                 onPress={() => onUpdateSettings({ sortMode: 'due' })}
               />
             </View>
+            </View>
 
+            <View style={s.section}>
             <Text style={s.sectionTitle}>완료 자동 정리</Text>
             <Text style={s.hint}>
               완료로 보낸 뒤 설정한 일수가 지난 할 일을 앱을 열 때 자동으로 삭제해요.
@@ -266,7 +278,9 @@ export default function MenuModal({
                 <Text style={s.smallBtnText}>적용</Text>
               </Pressable>
             </View>
+            </View>
 
+            <View style={s.section}>
             <Text style={s.sectionTitle}>데이터 백업</Text>
             <Text style={s.hint}>
               파일로 내보낸 뒤 iCloud Drive에 저장하면 안전하게 보관돼요. 다른 폰에서도
@@ -303,11 +317,9 @@ export default function MenuModal({
                 </View>
               </View>
             )}
-            {!!msg && <Text style={s.msg}>{msg}</Text>}
+            </View>
 
-            <Pressable testID="menu-close" style={s.closeBtn} onPress={onClose}>
-              <Text style={s.closeText}>닫기</Text>
-            </Pressable>
+            {!!msg && <Text style={s.msg}>{msg}</Text>}
           </ScrollView>
         </View>
       </View>
@@ -330,13 +342,41 @@ const s = StyleSheet.create({
     padding: 20,
     maxHeight: '85%',
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
   heading: {
     fontSize: 20,
     fontWeight: '800',
     color: C.text,
   },
+  xBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: C.inputBg,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  xBtnText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: C.sub,
+  },
+  section: {
+    marginTop: 12,
+    backgroundColor: C.card,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    padding: 12,
+  },
   sectionTitle: {
-    marginTop: 18,
     marginBottom: 8,
     fontSize: 14,
     fontWeight: '800',
@@ -447,20 +487,5 @@ const s = StyleSheet.create({
     lineHeight: 19,
     color: C.sub,
     fontWeight: '600',
-  },
-  closeBtn: {
-    marginTop: 20,
-    alignSelf: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 28,
-    borderRadius: 14,
-    backgroundColor: C.inputBg,
-    borderWidth: 1.5,
-    borderColor: C.border,
-  },
-  closeText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: C.sub,
   },
 });

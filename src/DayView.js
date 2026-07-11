@@ -400,6 +400,20 @@ const s = StyleSheet.create({
   body: {
     flex: 1,
   },
+  emptyBox: {
+    alignItems: 'center',
+    marginTop: 70,
+  },
+  emptyDuck: {
+    fontSize: 64,
+    marginBottom: 14,
+  },
+  empty: {
+    textAlign: 'center',
+    fontSize: 15,
+    lineHeight: 24,
+    color: C.faint,
+  },
   chartArea: {
     flexDirection: 'row',
     marginHorizontal: 12,

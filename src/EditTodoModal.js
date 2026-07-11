@@ -173,6 +173,10 @@ export default function EditTodoModal({
             <View style={s.headRow}>
               <EggIcon total={totalSteps} done={done} size={40} />
               <Text style={s.heading}>할 일 편집</Text>
+              <View style={{ flex: 1 }} />
+              <Pressable testID="edit-close" style={s.xBtn} onPress={onClose} hitSlop={8}>
+                <Text style={s.xBtnText}>✕</Text>
+              </Pressable>
             </View>
 
             <TextInput
@@ -411,9 +415,6 @@ export default function EditTodoModal({
                 <Text style={s.deleteText}>삭제</Text>
               </Pressable>
               <View style={{ flex: 1 }} />
-              <Pressable style={s.cancelBtn} onPress={onClose}>
-                <Text style={s.cancelText}>취소</Text>
-              </Pressable>
               <Pressable
                 style={s.saveBtn}
                 onPress={() =>
@@ -687,14 +688,20 @@ const s = StyleSheet.create({
     fontWeight: '700',
     fontSize: 14,
   },
-  cancelBtn: {
-    paddingVertical: 9,
-    paddingHorizontal: 14,
+  xBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: C.inputBg,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  cancelText: {
-    color: C.faint,
-    fontWeight: '700',
+  xBtnText: {
     fontSize: 14,
+    fontWeight: '800',
+    color: C.sub,
   },
   saveBtn: {
     paddingVertical: 9,
