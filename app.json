@@ -2,7 +2,7 @@
   "expo": {
     "name": "Duck's Todo",
     "slug": "my-first-app",
-    "version": "0.7.2",
+    "version": "0.7.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
