@@ -58,9 +58,15 @@ export async function updateBadge(count) {
   const Notifications = getNotifications();
   if (!Notifications) return;
   try {
-    const p = await Notifications.getPermissionsAsync();
-    if (!p.granted) return;
-    await Notifications.setBadgeCountAsync(count);
+    const permission = await Notifications.getPermissionsAsync();
+    const canSetBadge =
+      Platform.OS === 'ios'
+        ? permission.ios?.status === Notifications.IosAuthorizationStatus.AUTHORIZED ||
+          permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL ||
+          permission.ios?.status === Notifications.IosAuthorizationStatus.EPHEMERAL
+        : permission.granted;
+    if (!canSetBadge) return;
+    await Notifications.setBadgeCountAsync(Math.max(0, count));
   } catch (e) {
     // 배지 실패는 무시
   }
