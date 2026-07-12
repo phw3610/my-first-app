@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { exportBackup, pickBackup } from './backup';
 import Chip from './Chip';
+import { authenticate } from './lock';
 import { listSnapshots, loadSnapshot } from './storage';
 import { useTheme } from './theme';
 
@@ -38,6 +39,7 @@ export default function MenuModal({
   const [pending, setPending] = useState(null);
   const [msg, setMsg] = useState('');
   const [cleanText, setCleanText] = useState('');
+  const [goalText, setGoalText] = useState('');
   const [snapshots, setSnapshots] = useState([]);
 
   const settings = data.settings ?? {};
@@ -67,6 +69,26 @@ export default function MenuModal({
     setMsg('');
     setCleanText('');
     onUpdateSettings({ autoCleanDays: n });
+  };
+
+  const applyCustomGoal = () => {
+    const n = Number(goalText.trim());
+    if (!Number.isInteger(n) || n < 1 || n > 999) {
+      setMsg('주간 목표는 1~999 사이 숫자로 입력해주세요');
+      return;
+    }
+    setMsg('');
+    setGoalText('');
+    onUpdateSettings({ weeklyGoal: n });
+  };
+
+  const toggleLock = async (enable) => {
+    if (!(await authenticate())) {
+      setMsg('인증에 실패해서 잠금 설정을 바꾸지 못했어요');
+      return;
+    }
+    setMsg('');
+    onUpdateSettings({ lockEnabled: enable });
   };
 
   const addCategory = () => {
@@ -309,6 +331,79 @@ export default function MenuModal({
             </View>
 
             <View style={s.section}>
+            <Text style={s.sectionTitle}>앱 설정</Text>
+            <Text style={s.settingLabel}>부화 효과음 (꽥!)</Text>
+            <View style={s.chipRow}>
+              <Chip
+                label="켬"
+                active={settings.soundOn !== false}
+                onPress={() => onUpdateSettings({ soundOn: true })}
+              />
+              <Chip
+                label="끔"
+                active={settings.soundOn === false}
+                onPress={() => onUpdateSettings({ soundOn: false })}
+              />
+            </View>
+            <Text style={s.settingLabel}>주간 부화 목표 (주간 통계에 진행률 표시)</Text>
+            <View style={s.chipRow}>
+              <Chip
+                label="끄기"
+                active={!settings.weeklyGoal}
+                onPress={() => onUpdateSettings({ weeklyGoal: null })}
+              />
+              {[5, 10, 15].map((n) => (
+                <Chip
+                  key={n}
+                  label={`${n}마리`}
+                  active={settings.weeklyGoal === n}
+                  onPress={() => onUpdateSettings({ weeklyGoal: n })}
+                />
+              ))}
+            </View>
+            <View style={s.catRow}>
+              <TextInput
+                style={s.catEditInput}
+                value={goalText}
+                onChangeText={setGoalText}
+                onSubmitEditing={applyCustomGoal}
+                placeholder="직접 입력 (마리)"
+                placeholderTextColor={C.faint}
+                keyboardType="number-pad"
+              />
+              <Pressable style={s.smallBtn} onPress={applyCustomGoal}>
+                <Text style={s.smallBtnText}>적용</Text>
+              </Pressable>
+            </View>
+            <Text style={s.settingLabel}>주간 리포트 알림 (일요일 저녁 8시)</Text>
+            <View style={s.chipRow}>
+              <Chip
+                label="켬"
+                active={!!settings.weeklyReport}
+                onPress={() => onUpdateSettings({ weeklyReport: true })}
+              />
+              <Chip
+                label="끔"
+                active={!settings.weeklyReport}
+                onPress={() => onUpdateSettings({ weeklyReport: false })}
+              />
+            </View>
+            <Text style={s.settingLabel}>앱 잠금 (Face ID / 기기 암호)</Text>
+            <View style={s.chipRow}>
+              <Chip
+                label="켬"
+                active={!!settings.lockEnabled}
+                onPress={() => toggleLock(true)}
+              />
+              <Chip
+                label="끔"
+                active={!settings.lockEnabled}
+                onPress={() => toggleLock(false)}
+              />
+            </View>
+            </View>
+
+            <View style={s.section}>
             <Text style={s.sectionTitle}>데이터 백업</Text>
             <Text style={s.hint}>
               파일로 내보낸 뒤 iCloud Drive에 저장하면 안전하게 보관돼요. 다른 폰에서도
@@ -450,6 +545,13 @@ const makeStyles = (C) =>
   },
   snapLabel: {
     marginTop: 12,
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.faint,
+  },
+  settingLabel: {
+    marginTop: 10,
+    marginBottom: 6,
     fontSize: 12,
     fontWeight: '700',
     color: C.faint,

@@ -36,6 +36,23 @@ export async function scheduleReminder(title, date) {
   });
 }
 
+// 주간 리포트: 다음 일요일 20:00 일회성 예약 (앱을 열 때마다 최신 내용으로 재예약)
+export async function scheduleWeeklyReport(body) {
+  const Notifications = getNotifications();
+  if (!Notifications) return null;
+  ensureHandler(Notifications);
+  const { status } = await Notifications.requestPermissionsAsync();
+  if (status !== 'granted') throw new Error('알림 권한이 필요해요');
+  const d = new Date();
+  d.setDate(d.getDate() + ((7 - d.getDay()) % 7));
+  d.setHours(20, 0, 0, 0);
+  if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 7);
+  return Notifications.scheduleNotificationAsync({
+    content: { title: '주간 리포트 꽥! 🦆', body, sound: true },
+    trigger: { type: 'date', date: d },
+  });
+}
+
 // 남은 알 개수를 앱 아이콘 배지로 (알림 권한이 이미 있을 때만, 권한 팝업 없이)
 export async function updateBadge(count) {
   const Notifications = getNotifications();

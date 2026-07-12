@@ -15,6 +15,7 @@ const LIGHT = {
   barBg: '#FFFDF5',
   danger: '#E96A4C',
   green: '#7BC67E',
+  pond: '#CDEBF7',
 };
 
 const DARK = {
@@ -32,6 +33,7 @@ const DARK = {
   barBg: '#2C2317',
   danger: '#F07E62',
   green: '#7BC67E',
+  pond: '#16303E',
 };
 
 // 시스템 다크 모드를 실시간으로 따라간다.

@@ -10,6 +10,7 @@ import {
 import EggIcon from './EggIcon';
 import { hapticHatch } from './haptics';
 import { dateStr } from './repeat';
+import { playQuack } from './sound';
 import { useTheme } from './theme';
 import { fmtReminderShort, isDone, isStarted } from './utils';
 
@@ -23,6 +24,7 @@ export default function TodoRow({
   onPressOut,
   onAdvance,
   onSetArchived,
+  soundOn,
 }) {
   const C = useTheme();
   const s = useMemo(() => makeStyles(C), [C]);
@@ -39,6 +41,7 @@ export default function TodoRow({
   useEffect(() => {
     if (done && !prevDone.current) {
       hapticHatch();
+      if (soundOn) playQuack();
       Animated.sequence([
         Animated.spring(eggScale, {
           toValue: 1.7,

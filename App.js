@@ -22,8 +22,14 @@ import GuideModal from './src/GuideModal';
 import MenuModal from './src/MenuModal';
 import TodoRow from './src/TodoRow';
 import { hapticStep } from './src/haptics';
-import { cancelReminder, scheduleReminder, updateBadge } from './src/notifications';
-import { spawnRepeats } from './src/repeat';
+import { authenticate } from './src/lock';
+import {
+  cancelReminder,
+  scheduleReminder,
+  scheduleWeeklyReport,
+  updateBadge,
+} from './src/notifications';
+import { dateStr, spawnRepeats } from './src/repeat';
 import {
   cleanArchived,
   emptyData,
@@ -33,7 +39,7 @@ import {
   saveSnapshot,
 } from './src/storage';
 import { CATEGORY_COLORS, useTheme } from './src/theme';
-import { hatchStreak, isDone, isStarted } from './src/utils';
+import { hatchStreak, isDone, isStarted, weekHatchCount } from './src/utils';
 
 export default function App() {
   const C = useTheme();
@@ -55,6 +61,9 @@ export default function App() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [undo, setUndo] = useState(null);
   const undoTimer = useRef(null);
+  const [locked, setLocked] = useState(false);
+  const settingsRef = useRef(null);
+  settingsRef.current = data.settings;
 
   const listWrapRef = useRef(null);
   const listTopRef = useRef(0);
@@ -83,6 +92,12 @@ export default function App() {
       setLoaded(true);
       saveSnapshot(next);
       if (!next.settings?.seenGuide) setGuideOpen(true);
+      if (next.settings?.lockEnabled) {
+        setLocked(true);
+        setTimeout(() => {
+          authenticate().then((ok) => ok && setLocked(false));
+        }, 400);
+      }
     });
     if (Platform.OS === 'web') {
       // 드래그 중 브라우저 텍스트 선택이 제스처를 가로채는 것 방지
@@ -126,6 +141,48 @@ export default function App() {
     if (!loaded) return;
     updateBadge(data.todos.filter((t) => !t.archived && !isDone(t)).length);
   }, [data, loaded]);
+
+  // 백그라운드로 가면 다시 잠금
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'background' && settingsRef.current?.lockEnabled) setLocked(true);
+    });
+    return () => sub.remove();
+  }, []);
+
+  const tryUnlock = async () => {
+    if (await authenticate()) setLocked(false);
+  };
+
+  // 주간 리포트 알림: 켜져 있으면 열 때마다 최신 내용으로 재예약
+  useEffect(() => {
+    if (!loaded) return;
+    const s = data.settings ?? {};
+    if (!s.weeklyReport) {
+      if (s.weeklyReportNotifId) {
+        cancelReminder(s.weeklyReportNotifId);
+        setData((d) => ({
+          ...d,
+          settings: { ...d.settings, weeklyReportNotifId: null },
+        }));
+      }
+      return;
+    }
+    (async () => {
+      await cancelReminder(s.weeklyReportNotifId);
+      const count = weekHatchCount(data.todos);
+      try {
+        const id = await scheduleWeeklyReport(
+          count > 0
+            ? `이번 주 ${count}마리 부화했어요! 다음 주도 화이팅, 꽥!`
+            : '이번 주를 돌아보고 다음 주 알을 준비해요, 꽥!',
+        );
+        setData((d) => ({ ...d, settings: { ...d.settings, weeklyReportNotifId: id } }));
+      } catch (e) {
+        // 권한 거부 시 예약 생략
+      }
+    })();
+  }, [loaded, data.settings?.weeklyReport]);
 
   const { todos, categories, collapsed, templates, pages } = data;
   collapsedRef.current = collapsed;
@@ -221,6 +278,16 @@ export default function App() {
     const none = active.filter((t) => !catById[t.categoryId]);
     if (none.length) secs.push(make('none', '미분류', null, none));
     const nonEmpty = secs.filter((sec) => sec.total > 0);
+    // 오늘 포커스: 오늘 마감 + 오늘 알림 + 진행 중 (분류 섹션과 중복 표시)
+    const today = dateStr();
+    const focus = active.filter(
+      (t) =>
+        !isDone(t) &&
+        (t.dueDate === today ||
+          (t.reminder?.at && dateStr(new Date(t.reminder.at)) === today) ||
+          isStarted(t)),
+    );
+    if (focus.length) nonEmpty.unshift(make('today', '오늘', C.orange, focus));
     if (archived.length) nonEmpty.push(make('archived', '완료', C.green, archived));
     return nonEmpty;
   }, [todos, categories, filter, catById, q, sortMode, currentPageId, C]);
@@ -236,7 +303,9 @@ export default function App() {
   const performDrop = (contentY) => {
     const drag = draggingRef.current;
     if (!drag) return;
-    const secs = sectionsRef.current.filter((sec) => sec.key !== 'archived');
+    const secs = sectionsRef.current.filter(
+      (sec) => sec.key !== 'archived' && sec.key !== 'today',
+    );
     if (!secs.length) return;
 
     let target = secs[0];
@@ -675,7 +744,12 @@ export default function App() {
         </View>
 
         {page === 'day' ? (
-          <DayView todos={pageTodos} categories={categories} />
+          <DayView
+            todos={pageTodos}
+            allTodos={todos}
+            categories={categories}
+            weeklyGoal={data.settings?.weeklyGoal}
+          />
         ) : (
           <>
             <View style={styles.filterBar}>
@@ -796,11 +870,13 @@ export default function App() {
                       {!isCollapsed(sec.key) &&
                         sec.todos.map((item) => (
                           <TodoRow
-                            key={item.id}
+                            key={`${sec.key}:${item.id}`}
                             item={item}
                             isDragging={dragging?.id === item.id}
-                            sortLocked={sortMode === 'due'}
+                            sortLocked={sortMode === 'due' || sec.key === 'today'}
+                            soundOn={data.settings?.soundOn !== false}
                             onLayout={(e) => {
+                              if (sec.key === 'today') return;
                               rowLayouts.current[item.id] = {
                                 y: e.nativeEvent.layout.y,
                                 h: e.nativeEvent.layout.height,
@@ -947,6 +1023,15 @@ export default function App() {
           }}
         />
       )}
+      {locked && (
+        <View style={styles.lockOverlay}>
+          <Image source={require('./assets/mascot.png')} style={styles.lockMascot} />
+          <Text style={styles.lockText}>잠겨 있어요, 꽥!</Text>
+          <Pressable testID="unlock-btn" style={styles.lockBtn} onPress={tryUnlock}>
+            <Text style={styles.lockBtnText}>잠금 해제</Text>
+          </Pressable>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -1046,6 +1131,39 @@ const makeStyles = (C) =>
   undoAction: {
     color: C.orange,
     fontSize: 14,
+    fontWeight: '800',
+  },
+  lockOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: C.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 100,
+  },
+  lockMascot: {
+    width: 140,
+    height: 140,
+    marginBottom: 12,
+  },
+  lockText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: C.text,
+    marginBottom: 18,
+  },
+  lockBtn: {
+    backgroundColor: C.orange,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+  },
+  lockBtnText: {
+    color: '#FFFFFF',
+    fontSize: 16,
     fontWeight: '800',
   },
   dotsRow: {

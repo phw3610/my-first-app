@@ -21,6 +21,22 @@ export function hatchStreak(todos) {
   return streak;
 }
 
+// 이번 주(일요일 시작) 부화 수
+export function weekHatchCount(todos) {
+  const start = new Date();
+  start.setDate(start.getDate() - start.getDay());
+  start.setHours(0, 0, 0, 0);
+  const from = start.getTime();
+  return todos.reduce(
+    (sum, t) =>
+      sum +
+      (t.timeline ?? []).filter(
+        (e) => e.step === 'done' && new Date(e.at).getTime() >= from,
+      ).length,
+    0,
+  );
+}
+
 export const fmtReminderShort = (iso) => {
   const d = new Date(iso);
   const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;

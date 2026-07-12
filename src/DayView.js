@@ -71,11 +71,12 @@ const fmtDuration = (ms) => {
   return m ? `${h}시간 ${m}분` : `${h}시간`;
 };
 
-export default function DayView({ todos, categories }) {
+export default function DayView({ todos, allTodos, categories, weeklyGoal }) {
   const C = useTheme();
   const s = useMemo(() => makeStyles(C), [C]);
-  const [mode, setMode] = useState('day'); // 'day' | 'week' | 'month'
+  const [mode, setMode] = useState('day'); // 'day' | 'week' | 'month' | 'pond'
   const [date, setDate] = useState(startOfDay(new Date()));
+  const [selectedDuck, setSelectedDuck] = useState(null);
   const chartRef = useRef(null);
 
   const dayStart = date.getTime();
@@ -195,15 +196,41 @@ export default function DayView({ todos, categories }) {
       ? 'transparent'
       : `rgba(255, 158, 44, ${Math.min(0.2 + n * 0.2, 0.85)})`;
 
+  // ---- 연못: 지금까지 부화시킨 오리들 (모든 페이지)
+  const hatched = useMemo(() => {
+    const list = (allTodos ?? todos)
+      .filter((t) => t.doneSteps >= t.totalSteps)
+      .map((t) => {
+        const doneEntry = [...(t.timeline ?? [])]
+          .reverse()
+          .find((e) => e.step === 'done');
+        return {
+          id: t.id,
+          title: t.title,
+          at: doneEntry ? new Date(doneEntry.at) : null,
+        };
+      })
+      .sort((a, b) => (b.at?.getTime() ?? 0) - (a.at?.getTime() ?? 0));
+    return list;
+  }, [allTodos, todos]);
+
+  const hashPos = (id, salt) => {
+    let h = 7;
+    const str = id + salt;
+    for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+    return h % 100;
+  };
+
   return (
     <View style={s.container}>
       <View style={s.tabs}>
         <Chip label="하루" active={mode === 'day'} onPress={() => setMode('day')} />
         <Chip label="주간" active={mode === 'week'} onPress={() => setMode('week')} />
         <Chip label="월간" active={mode === 'month'} onPress={() => setMode('month')} />
+        <Chip label="연못" active={mode === 'pond'} onPress={() => setMode('pond')} />
       </View>
 
-      <View style={s.nav}>
+      <View style={[s.nav, mode === 'pond' && { display: 'none' }]}>
         <Pressable style={s.navBtn} onPress={() => move(-1)} hitSlop={8}>
           <Text style={s.navBtnText}>◀</Text>
         </Pressable>
@@ -335,6 +362,22 @@ export default function DayView({ todos, categories }) {
             <Text style={s.statSummary}>
               이번 주 부화 {weekTotalHatched}마리 · 총 {fmtDuration(weekTotalMs)}
             </Text>
+            {weeklyGoal ? (
+              <View style={s.goalBox}>
+                <Text style={s.goalText}>
+                  주간 목표 {Math.min(weekTotalHatched, weeklyGoal)}/{weeklyGoal}마리
+                  {weekTotalHatched >= weeklyGoal ? ' 달성! 🎉' : ''}
+                </Text>
+                <View style={s.goalTrack}>
+                  <View
+                    style={[
+                      s.goalFill,
+                      { width: `${Math.min(100, (weekTotalHatched / weeklyGoal) * 100)}%` },
+                    ]}
+                  />
+                </View>
+              </View>
+            ) : null}
             <View style={s.weekChart}>
               {week.days.map((d, i) => {
                 const h = Math.round((d.ms / weekMax) * 110);
@@ -404,6 +447,64 @@ export default function DayView({ todos, categories }) {
             </View>
             <Text style={s.monthHint}>색이 진할수록 그 날 많이 부화했어요</Text>
           </View>
+        </ScrollView>
+      )}
+
+      {mode === 'pond' && (
+        <ScrollView style={s.body}>
+          <Text style={s.pondCount}>
+            지금까지 {hatched.length}마리를 부화시켰어요, 꽥! 🎉
+          </Text>
+          <View style={s.pondCard}>
+            <Text style={s.pondDeco}>🪷</Text>
+            <Text style={[s.pondDeco, { left: '72%', top: '12%' }]}>🌿</Text>
+            {hatched.slice(0, 40).map((h, idx) => {
+              // 격자 배치 + 약간의 흔들림: 오리끼리 겹치지 않게
+              const col = idx % 5;
+              const row = Math.floor(idx / 5);
+              const left = 4 + col * 18 + (hashPos(h.id, 'x') % 7);
+              const top = 4 + row * 11 + (hashPos(h.id, 'y') % 5);
+              const size = 30 + (hashPos(h.id, 's') % 10);
+              return (
+                <Pressable
+                  key={h.id}
+                  testID={`duck-${h.id}`}
+                  onPress={() => setSelectedDuck(h)}
+                  style={{ position: 'absolute', left: `${left}%`, top: `${top}%` }}
+                  hitSlop={4}
+                >
+                  <Image
+                    source={require('../assets/chick.png')}
+                    style={{ width: size, height: size }}
+                  />
+                </Pressable>
+              );
+            })}
+            {hatched.length === 0 && (
+              <View style={s.pondEmpty}>
+                <Image source={require('../assets/egg-0.png')} style={s.pondEmptyEgg} />
+                <Text style={s.pondEmptyText}>
+                  아직 연못이 비어 있어요.{'\n'}첫 알을 부화시켜 보세요!
+                </Text>
+              </View>
+            )}
+          </View>
+          {selectedDuck && (
+            <View style={s.duckInfo}>
+              <Image source={require('../assets/chick.png')} style={s.duckInfoImg} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.duckInfoTitle}>{selectedDuck.title}</Text>
+                <Text style={s.duckInfoDate}>
+                  {selectedDuck.at
+                    ? `${selectedDuck.at.getFullYear()}.${selectedDuck.at.getMonth() + 1}.${selectedDuck.at.getDate()} 부화`
+                    : '부화 시각 기록 없음'}
+                </Text>
+              </View>
+            </View>
+          )}
+          {hatched.length > 40 && (
+            <Text style={s.pondMore}>최근 40마리만 헤엄치고 있어요</Text>
+          )}
         </ScrollView>
       )}
     </View>
@@ -658,6 +759,96 @@ const makeStyles = (C) =>
   catStatMs: {
     fontSize: 13,
     color: C.sub,
+  },
+  goalBox: {
+    marginBottom: 12,
+  },
+  goalText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.sub,
+    marginBottom: 5,
+  },
+  goalTrack: {
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: C.inputBg,
+    overflow: 'hidden',
+  },
+  goalFill: {
+    height: '100%',
+    borderRadius: 5,
+    backgroundColor: C.orange,
+  },
+  pondCount: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    fontSize: 15,
+    fontWeight: '800',
+    color: C.text,
+  },
+  pondCard: {
+    marginHorizontal: 12,
+    height: 360,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    backgroundColor: C.pond,
+    overflow: 'hidden',
+  },
+  pondDeco: {
+    position: 'absolute',
+    left: '12%',
+    top: '78%',
+    fontSize: 26,
+  },
+  pondEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pondEmptyEgg: {
+    width: 70,
+    height: 70,
+    marginBottom: 10,
+  },
+  pondEmptyText: {
+    textAlign: 'center',
+    fontSize: 14,
+    lineHeight: 21,
+    color: C.sub,
+  },
+  duckInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 12,
+    marginTop: 10,
+    backgroundColor: C.card,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    padding: 12,
+  },
+  duckInfoImg: {
+    width: 40,
+    height: 40,
+    marginRight: 10,
+  },
+  duckInfoTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: C.text,
+  },
+  duckInfoDate: {
+    marginTop: 2,
+    fontSize: 12,
+    color: C.sub,
+  },
+  pondMore: {
+    marginTop: 8,
+    textAlign: 'center',
+    fontSize: 12,
+    color: C.faint,
   },
   monthHead: {
     flexDirection: 'row',

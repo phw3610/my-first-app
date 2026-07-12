@@ -11,7 +11,15 @@ export const emptyData = {
   collapsed: {},
   templates: [],
   pages: [{ id: MAIN_PAGE_ID, name: '꽥! 투두' }],
-  settings: { sortMode: 'manual', autoCleanDays: null, lastPageId: MAIN_PAGE_ID },
+  settings: {
+    sortMode: 'manual',
+    autoCleanDays: null,
+    lastPageId: MAIN_PAGE_ID,
+    soundOn: true,
+    weeklyGoal: null,
+    weeklyReport: false,
+    lockEnabled: false,
+  },
 };
 
 function normalizeStep(s) {
