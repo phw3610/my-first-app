@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import {
   Animated,
   PanResponder,
@@ -10,7 +10,7 @@ import {
 import EggIcon from './EggIcon';
 import { hapticHatch } from './haptics';
 import { dateStr } from './repeat';
-import { C } from './theme';
+import { useTheme } from './theme';
 import { fmtReminderShort, isDone, isStarted } from './utils';
 
 export default function TodoRow({
@@ -24,6 +24,8 @@ export default function TodoRow({
   onAdvance,
   onSetArchived,
 }) {
+  const C = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
   const translateX = useRef(new Animated.Value(0)).current;
   const eggScale = useRef(new Animated.Value(1)).current;
   const itemRef = useRef(item);
@@ -184,7 +186,8 @@ export default function TodoRow({
   );
 }
 
-const s = StyleSheet.create({
+const makeStyles = (C) =>
+  StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,4 +1,4 @@
-import { Appearance } from 'react-native';
+import { useColorScheme } from 'react-native';
 
 const LIGHT = {
   bg: '#FFF6DA',
@@ -34,9 +34,11 @@ const DARK = {
   green: '#7BC67E',
 };
 
-// 시스템 다크 모드를 따라감 (앱 시작 시점 기준)
-export const isDark = Appearance.getColorScheme() === 'dark';
-export const C = isDark ? DARK : LIGHT;
+// 시스템 다크 모드를 실시간으로 따라간다.
+// 각 컴포넌트는 useTheme()로 팔레트를 받고, 스타일은 makeStyles(C) 팩토리로 생성한다.
+export function useTheme() {
+  return useColorScheme() === 'dark' ? DARK : LIGHT;
+}
 
 export const CATEGORY_COLORS = [
   '#FF9E2C', '#7BC67E', '#6FA8DC', '#C58AD6', '#E88CA0', '#8FD3C7',

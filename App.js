@@ -12,21 +12,33 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useColorScheme,
   View,
 } from 'react-native';
 import Chip from './src/Chip';
 import DayView from './src/DayView';
 import EditTodoModal from './src/EditTodoModal';
+import GuideModal from './src/GuideModal';
 import MenuModal from './src/MenuModal';
 import TodoRow from './src/TodoRow';
 import { hapticStep } from './src/haptics';
 import { cancelReminder, scheduleReminder, updateBadge } from './src/notifications';
 import { spawnRepeats } from './src/repeat';
-import { cleanArchived, emptyData, loadData, normalizeData, saveData } from './src/storage';
-import { C, CATEGORY_COLORS, isDark } from './src/theme';
-import { isDone, isStarted } from './src/utils';
+import {
+  cleanArchived,
+  emptyData,
+  loadData,
+  normalizeData,
+  saveData,
+  saveSnapshot,
+} from './src/storage';
+import { CATEGORY_COLORS, useTheme } from './src/theme';
+import { hatchStreak, isDone, isStarted } from './src/utils';
 
 export default function App() {
+  const C = useTheme();
+  const styles = useMemo(() => makeStyles(C), [C]);
+  const isDarkMode = useColorScheme() === 'dark';
   const [data, setData] = useState(emptyData);
   const [loaded, setLoaded] = useState(false);
   const [page, setPage] = useState('list'); // 'list' | 'day'
@@ -40,6 +52,9 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [inputFocused, setInputFocused] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [undo, setUndo] = useState(null);
+  const undoTimer = useRef(null);
 
   const listWrapRef = useRef(null);
   const listTopRef = useRef(0);
@@ -66,6 +81,8 @@ export default function App() {
       next = cleanArchived(next) ?? next;
       setData(next);
       setLoaded(true);
+      saveSnapshot(next);
+      if (!next.settings?.seenGuide) setGuideOpen(true);
     });
     if (Platform.OS === 'web') {
       // 드래그 중 브라우저 텍스트 선택이 제스처를 가로채는 것 방지
@@ -206,7 +223,7 @@ export default function App() {
     const nonEmpty = secs.filter((sec) => sec.total > 0);
     if (archived.length) nonEmpty.push(make('archived', '완료', C.green, archived));
     return nonEmpty;
-  }, [todos, categories, filter, catById, q, sortMode, currentPageId]);
+  }, [todos, categories, filter, catById, q, sortMode, currentPageId, C]);
   sectionsRef.current = sections;
 
   // ---- 드래그 앤 드롭
@@ -405,8 +422,19 @@ export default function App() {
     }));
   };
 
-  const setArchived = (id, value) => {
-    hapticStep();
+  const showUndo = (label, apply) => {
+    clearTimeout(undoTimer.current);
+    setUndo({ label, apply });
+    undoTimer.current = setTimeout(() => setUndo(null), 5000);
+  };
+
+  const doUndo = () => {
+    clearTimeout(undoTimer.current);
+    undo?.apply();
+    setUndo(null);
+  };
+
+  const applyArchived = (id, value) =>
     setData((d) => ({
       ...d,
       todos: d.todos.map((t) =>
@@ -415,6 +443,11 @@ export default function App() {
           : t,
       ),
     }));
+
+  const setArchived = (id, value) => {
+    hapticStep();
+    applyArchived(id, value);
+    if (value) showUndo('완료함으로 보냈어요', () => applyArchived(id, false));
   };
 
   const updateTodo = (id, fields) => {
@@ -473,9 +506,33 @@ export default function App() {
 
   const removeTodo = (id) => {
     const t = todos.find((x) => x.id === id);
-    cancelReminder(t?.reminder?.notificationId);
+    if (!t) return;
+    const idx = todos.findIndex((x) => x.id === id);
+    cancelReminder(t.reminder?.notificationId);
     setData((d) => ({ ...d, todos: d.todos.filter((x) => x.id !== id) }));
     setEditingId(null);
+    showUndo('삭제했어요', () => {
+      setData((d) => {
+        const arr = [...d.todos];
+        arr.splice(Math.min(idx, arr.length), 0, t);
+        return { ...d, todos: arr };
+      });
+      // 미래 알림이 있었으면 다시 예약
+      if (t.reminder?.at && new Date(t.reminder.at) > new Date()) {
+        scheduleReminder(t.title, new Date(t.reminder.at))
+          .then((nid) =>
+            setData((d) => ({
+              ...d,
+              todos: d.todos.map((x) =>
+                x.id === t.id
+                  ? { ...x, reminder: { at: t.reminder.at, notificationId: nid } }
+                  : x,
+              ),
+            })),
+          )
+          .catch(() => {});
+      }
+    });
   };
 
   const importBackup = async (rawData) => {
@@ -562,10 +619,11 @@ export default function App() {
 
   const editingTodo = editingId ? todos.find((t) => t.id === editingId) : null;
   const showOptions = inputFocused || !!text.trim();
+  const streak = useMemo(() => hatchStreak(todos), [todos]);
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
+      <StatusBar style={isDarkMode ? 'light' : 'dark'} />
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -579,9 +637,12 @@ export default function App() {
             <Image source={require('./assets/mascot.png')} style={styles.mascot} />
           </Pressable>
           <View style={styles.headerText} {...headerPan.panHandlers}>
-            <Text style={styles.title} numberOfLines={1}>
-              {page === 'day' ? '하루보기' : currentPage.name}
-            </Text>
+            <View style={styles.titleRow}>
+              <Text style={styles.title} numberOfLines={1}>
+                {page === 'day' ? '하루보기' : currentPage.name}
+              </Text>
+              {streak >= 2 && <Text style={styles.streak}>🔥 {streak}일</Text>}
+            </View>
             {pages.length > 1 && (
               <View style={styles.dotsRow}>
                 {pages.map((p, i) => (
@@ -763,6 +824,14 @@ export default function App() {
                   </Text>
                 </View>
               )}
+              {undo && (
+                <View style={styles.undoBar}>
+                  <Text style={styles.undoText}>{undo.label}</Text>
+                  <Pressable testID="undo-btn" onPress={doUndo} hitSlop={8}>
+                    <Text style={styles.undoAction}>실행 취소</Text>
+                  </Pressable>
+                </View>
+              )}
             </View>
 
             <View style={styles.inputArea}>
@@ -854,6 +923,10 @@ export default function App() {
       {menuOpen && (
         <MenuModal
           data={data}
+          onShowGuide={() => {
+            setMenuOpen(false);
+            setGuideOpen(true);
+          }}
           onAddCategory={addCategory}
           onRenameCategory={renameCategory}
           onDeleteCategory={deleteCategory}
@@ -866,11 +939,20 @@ export default function App() {
           onClose={() => setMenuOpen(false)}
         />
       )}
+      {guideOpen && (
+        <GuideModal
+          onClose={() => {
+            setGuideOpen(false);
+            if (!data.settings?.seenGuide) updateSettings({ seenGuide: true });
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (C) =>
+  StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: C.bg,
@@ -926,6 +1008,45 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     fontWeight: '600',
     color: C.sub,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  streak: {
+    marginLeft: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '800',
+    color: C.orange,
+  },
+  undoBar: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: C.text,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  undoText: {
+    color: C.bg,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  undoAction: {
+    color: C.orange,
+    fontSize: 14,
+    fontWeight: '800',
   },
   dotsRow: {
     flexDirection: 'row',

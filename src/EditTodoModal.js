@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -17,7 +17,7 @@ import {
 } from './attachments';
 import Chip from './Chip';
 import EggIcon from './EggIcon';
-import { C } from './theme';
+import { useTheme } from './theme';
 
 const resizeSteps = (steps, n) => {
   const next = steps.slice(0, n);
@@ -39,6 +39,8 @@ export default function EditTodoModal({
   onDelete,
   onClose,
 }) {
+  const C = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
   const [title, setTitle] = useState(todo.title);
   const [categoryId, setCategoryId] = useState(todo.categoryId);
   const [steps, setSteps] = useState(resizeSteps(todo.steps ?? [], todo.totalSteps));
@@ -440,7 +442,8 @@ export default function EditTodoModal({
   );
 }
 
-const s = StyleSheet.create({
+const makeStyles = (C) =>
+  StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(93, 67, 36, 0.35)',

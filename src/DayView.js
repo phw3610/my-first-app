@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import Chip from './Chip';
-import { C } from './theme';
+import { useTheme } from './theme';
 
 const HOUR_W = 60; // 1시간당 픽셀
 const CHART_W = 24 * HOUR_W;
@@ -72,6 +72,8 @@ const fmtDuration = (ms) => {
 };
 
 export default function DayView({ todos, categories }) {
+  const C = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
   const [mode, setMode] = useState('day'); // 'day' | 'week' | 'month'
   const [date, setDate] = useState(startOfDay(new Date()));
   const chartRef = useRef(null);
@@ -164,8 +166,29 @@ export default function DayView({ todos, categories }) {
         : `${date.getFullYear()}년 ${date.getMonth() + 1}월`;
 
   const weekMax = Math.max(...week.days.map((d) => d.ms), 1);
-  const weekTotalMs = week.days.reduce((s, d) => s + d.ms, 0);
-  const weekTotalHatched = week.days.reduce((s, d) => s + d.hatched, 0);
+  const weekTotalMs = week.days.reduce((sum, d) => sum + d.ms, 0);
+  const weekTotalHatched = week.days.reduce((sum, d) => sum + d.hatched, 0);
+
+  // 주간 분류별 시간 합계
+  const weekCatStats = useMemo(() => {
+    const start = week.start.getTime();
+    const end = start + 7 * DAY_MS;
+    const byCat = new Map();
+    todos.forEach((t) => {
+      const ms = segmentsFor(t, start, end).reduce((a, seg) => a + (seg.to - seg.from), 0);
+      if (!ms) return;
+      const key = t.categoryId && catById[t.categoryId] ? t.categoryId : 'none';
+      byCat.set(key, (byCat.get(key) ?? 0) + ms);
+    });
+    return [...byCat.entries()]
+      .map(([key, ms]) => ({
+        key,
+        ms,
+        name: key === 'none' ? '미분류' : catById[key].name,
+        color: key === 'none' ? null : catById[key].color,
+      }))
+      .sort((a, b) => b.ms - a.ms);
+  }, [todos, week, catById]);
 
   const heatColor = (n) =>
     n === 0
@@ -331,6 +354,22 @@ export default function DayView({ todos, categories }) {
                 );
               })}
             </View>
+            {weekCatStats.length > 0 && (
+              <View style={s.catStats}>
+                {weekCatStats.map((cs) => (
+                  <View key={cs.key} style={s.catStatRow}>
+                    <View
+                      style={[
+                        s.titleDot,
+                        { backgroundColor: cs.color ?? C.faint },
+                      ]}
+                    />
+                    <Text style={s.catStatName}>{cs.name}</Text>
+                    <Text style={s.catStatMs}>{fmtDuration(cs.ms)}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         </ScrollView>
       )}
@@ -371,7 +410,8 @@ export default function DayView({ todos, categories }) {
   );
 }
 
-const s = StyleSheet.create({
+const makeStyles = (C) =>
+  StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -595,6 +635,28 @@ const s = StyleSheet.create({
   weekHatch: {
     marginTop: 2,
     fontSize: 10,
+    color: C.sub,
+  },
+  catStats: {
+    marginTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+    paddingTop: 10,
+  },
+  catStatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 3,
+  },
+  catStatName: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.text,
+    marginLeft: 3,
+  },
+  catStatMs: {
+    fontSize: 13,
     color: C.sub,
   },
   monthHead: {

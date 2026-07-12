@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -10,7 +10,8 @@ import {
 } from 'react-native';
 import { exportBackup, pickBackup } from './backup';
 import Chip from './Chip';
-import { C } from './theme';
+import { listSnapshots, loadSnapshot } from './storage';
+import { useTheme } from './theme';
 
 export default function MenuModal({
   data,
@@ -22,9 +23,12 @@ export default function MenuModal({
   onDeletePage,
   onDeleteTemplate,
   onUpdateSettings,
+  onShowGuide,
   onImport,
   onClose,
 }) {
+  const C = useTheme();
+  const s = useMemo(() => makeStyles(C), [C]);
   const [newName, setNewName] = useState('');
   const [editId, setEditId] = useState(null);
   const [editName, setEditName] = useState('');
@@ -34,8 +38,25 @@ export default function MenuModal({
   const [pending, setPending] = useState(null);
   const [msg, setMsg] = useState('');
   const [cleanText, setCleanText] = useState('');
+  const [snapshots, setSnapshots] = useState([]);
 
   const settings = data.settings ?? {};
+
+  useEffect(() => {
+    listSnapshots().then(setSnapshots).catch(() => {});
+  }, []);
+
+  const restoreSnapshot = async (date) => {
+    try {
+      const snap = await loadSnapshot(date);
+      if (snap) {
+        setPending(snap);
+        setMsg('');
+      }
+    } catch (e) {
+      setMsg('스냅샷을 읽지 못했어요: ' + e.message);
+    }
+  };
 
   const applyCustomClean = () => {
     const n = Number(cleanText.trim());
@@ -98,6 +119,10 @@ export default function MenuModal({
               </Pressable>
             </View>
             <Text style={s.hint}>왼쪽 위 오리를 누르면 하루보기로 전환돼요!</Text>
+
+            <Pressable testID="menu-guide" style={s.guideBtn} onPress={onShowGuide}>
+              <Text style={s.guideBtnText}>📖 사용법 보기</Text>
+            </Pressable>
 
             <View style={s.section}>
             <Text style={s.sectionTitle}>페이지 관리</Text>
@@ -297,6 +322,21 @@ export default function MenuModal({
                 <Text style={s.backupBtnText}>📥 백업 불러오기</Text>
               </Pressable>
             </View>
+            {snapshots.length > 0 && (
+              <>
+                <Text style={s.snapLabel}>
+                  자동 백업 — 매일 첫 실행 때 저장돼요 (최근 3개)
+                </Text>
+                {snapshots.map((d) => (
+                  <View key={d} style={s.catRow}>
+                    <Text style={s.catName}>🕐 {d}</Text>
+                    <Pressable style={s.smallGhostBtn} onPress={() => restoreSnapshot(d)}>
+                      <Text style={s.smallGhostText}>복구</Text>
+                    </Pressable>
+                  </View>
+                ))}
+              </>
+            )}
             {pending && (
               <View style={s.confirmBox}>
                 <Text style={s.confirmText}>
@@ -330,7 +370,8 @@ export default function MenuModal({
   );
 }
 
-const s = StyleSheet.create({
+const makeStyles = (C) =>
+  StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(93, 67, 36, 0.35)',
@@ -393,6 +434,25 @@ const s = StyleSheet.create({
     lineHeight: 19,
     color: C.faint,
     marginBottom: 8,
+  },
+  guideBtn: {
+    backgroundColor: C.card,
+    borderWidth: 1.5,
+    borderColor: C.borderStrong,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  guideBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: C.sub,
+  },
+  snapLabel: {
+    marginTop: 12,
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.faint,
   },
   catRow: {
     flexDirection: 'row',

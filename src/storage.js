@@ -104,3 +104,35 @@ export async function loadData() {
 export async function saveData(data) {
   await AsyncStorage.setItem(KEY, JSON.stringify(data));
 }
+
+// ---- 자동 스냅샷: 하루 1회, 최근 3개 보관 (데이터 사고 시 복구용)
+const SNAP_PREFIX = 'quack-snap-';
+const localDate = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+export async function saveSnapshot(data) {
+  try {
+    const key = SNAP_PREFIX + localDate();
+    if (await AsyncStorage.getItem(key)) return;
+    await AsyncStorage.setItem(key, JSON.stringify(data));
+    const keys = (await AsyncStorage.getAllKeys())
+      .filter((k) => k.startsWith(SNAP_PREFIX))
+      .sort();
+    for (const k of keys.slice(0, -3)) await AsyncStorage.removeItem(k);
+  } catch (e) {
+    // 스냅샷 실패는 앱 동작에 영향 주지 않음
+  }
+}
+
+export async function listSnapshots() {
+  const keys = (await AsyncStorage.getAllKeys())
+    .filter((k) => k.startsWith(SNAP_PREFIX))
+    .sort()
+    .reverse();
+  return keys.map((k) => k.slice(SNAP_PREFIX.length));
+}
+
+export async function loadSnapshot(date) {
+  const raw = await AsyncStorage.getItem(SNAP_PREFIX + date);
+  return raw ? JSON.parse(raw) : null;
+}
