@@ -698,7 +698,10 @@ export default function App() {
               >
                 {sections.length === 0 ? (
                   <View style={styles.emptyBox}>
-                    <Text style={styles.emptyDuck}>🐥</Text>
+                    <Image
+                      source={require('./assets/mascot.png')}
+                      style={styles.emptyDuck}
+                    />
                     <Text style={styles.empty}>
                       아직 할 일이 없어요.{'\n'}
                       할 일을 추가하면 알이 생기고,{'\n'}
@@ -1012,7 +1015,8 @@ const styles = StyleSheet.create({
     marginTop: 60,
   },
   emptyDuck: {
-    fontSize: 64,
+    width: 130,
+    height: 130,
     marginBottom: 14,
   },
   empty: {

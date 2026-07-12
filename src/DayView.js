@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -181,7 +182,7 @@ export default function DayView({ todos, categories }) {
       {mode === 'day' &&
         (rows.length === 0 ? (
           <View style={s.emptyBox}>
-            <Text style={s.emptyDuck}>🐥</Text>
+            <Image source={require('../assets/mascot.png')} style={s.emptyDuck} />
             <Text style={s.empty}>이 날은 진행한 알이 없어요, 꽥!</Text>
           </View>
         ) : (
@@ -405,7 +406,8 @@ const s = StyleSheet.create({
     marginTop: 70,
   },
   emptyDuck: {
-    fontSize: 64,
+    width: 130,
+    height: 130,
     marginBottom: 14,
   },
   empty: {
