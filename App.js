@@ -895,6 +895,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 27,
+    lineHeight: 34,
     fontWeight: '800',
     color: C.text,
   },
@@ -922,6 +923,7 @@ const styles = StyleSheet.create({
   },
   bubbleText: {
     fontSize: 13,
+    lineHeight: 19,
     fontWeight: '600',
     color: C.sub,
   },

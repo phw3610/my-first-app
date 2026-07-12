@@ -87,7 +87,10 @@ export default function MenuModal({
     <Modal transparent animationType="fade" visible onRequestClose={onClose}>
       <View style={s.backdrop}>
         <View style={s.card}>
-          <ScrollView>
+          <ScrollView
+            contentContainerStyle={s.scrollContent}
+            scrollIndicatorInsets={{ right: 2, top: 14, bottom: 14 }}
+          >
             <View style={s.headerRow}>
               <Text style={s.heading}>메뉴</Text>
               <Pressable testID="menu-close" style={s.xBtn} onPress={onClose} hitSlop={8}>
@@ -339,8 +342,11 @@ const s = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1.5,
     borderColor: C.border,
-    padding: 20,
     maxHeight: '85%',
+    overflow: 'hidden',
+  },
+  scrollContent: {
+    padding: 20,
   },
   headerRow: {
     flexDirection: 'row',

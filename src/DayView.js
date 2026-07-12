@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Dimensions,
   Image,
   Pressable,
   ScrollView,
@@ -101,13 +102,28 @@ export default function DayView({ todos, categories }) {
     [todos, dayStart, dayEnd],
   );
 
+  // 차트 초기 스크롤: 오늘이면 현재 시각을 화면 가운데로, 다른 날은 첫 활동 위치로
+  const chartVisibleW = Dimensions.get('window').width - 24 - 96;
+  const desiredX = (() => {
+    let x;
+    if (isToday) {
+      const nowH = (Date.now() - dayStart) / 3600000;
+      x = nowH * HOUR_W - chartVisibleW / 2;
+    } else {
+      const firstHour = rows.length
+        ? Math.min(...rows.map((r) => (r.segs[0].from - dayStart) / 3600000))
+        : 8;
+      x = (firstHour - 0.5) * HOUR_W;
+    }
+    return Math.min(Math.max(0, x), CHART_W - chartVisibleW);
+  })();
+
+  const scrollToDesired = () => chartRef.current?.scrollTo({ x: desiredX, animated: false });
+
   useEffect(() => {
-    if (mode !== 'day' || !chartRef.current) return;
-    const firstHour = rows.length
-      ? Math.min(...rows.map((r) => (r.segs[0].from - dayStart) / 3600000))
-      : 8;
-    const x = Math.max(0, (firstHour - 0.5) * HOUR_W);
-    setTimeout(() => chartRef.current?.scrollTo({ x, animated: false }), 50);
+    if (mode !== 'day') return;
+    const t = setTimeout(scrollToDesired, 60);
+    return () => clearTimeout(t);
   }, [dayStart, rows.length, mode]);
 
   // ---- 주간
@@ -203,7 +219,12 @@ export default function DayView({ todos, categories }) {
                   </View>
                 ))}
               </View>
-              <ScrollView horizontal ref={chartRef} showsHorizontalScrollIndicator>
+              <ScrollView
+                horizontal
+                ref={chartRef}
+                showsHorizontalScrollIndicator
+                onContentSizeChange={scrollToDesired}
+              >
                 <View style={{ width: CHART_W + 20 }}>
                   <View style={s.axisRow}>
                     {Array.from({ length: 25 }, (_, h) => (
