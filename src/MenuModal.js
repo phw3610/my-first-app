@@ -89,7 +89,7 @@ export default function MenuModal({
         <View style={s.card}>
           <ScrollView>
             <View style={s.headerRow}>
-              <Text style={s.heading}>메뉴 🐥</Text>
+              <Text style={s.heading}>메뉴</Text>
               <Pressable testID="menu-close" style={s.xBtn} onPress={onClose} hitSlop={8}>
                 <Text style={s.xBtnText}>✕</Text>
               </Pressable>
