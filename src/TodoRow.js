@@ -8,16 +8,23 @@ import {
   View,
 } from 'react-native';
 import EggIcon from './EggIcon';
-import { hapticHatch } from './haptics';
+import { hapticHatch, hapticStep } from './haptics';
 import { dateStr } from './repeat';
 import { playQuack } from './sound';
 import { useTheme } from './theme';
 import { fmtReminderShort, isDone, isStarted } from './utils';
 
+const REVEAL_WIDTH = 84;
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
 export default function TodoRow({
   item,
   isDragging,
   sortLocked,
+  isSwipeOpen,
+  anySwipeOpen,
+  onSwipeOpenChange,
+  onDeleteSwipe,
   onLayout,
   onEdit,
   onStartDrag,
@@ -36,6 +43,7 @@ export default function TodoRow({
   const prevDone = useRef(done);
   const swipingRef = useRef(false);
   const lastSwipeAt = useRef(0);
+  const startXRef = useRef(0);
 
   // 부화 순간: 햅틱 + 알이 통통 튀는 애니메이션
   useEffect(() => {
@@ -55,41 +63,58 @@ export default function TodoRow({
     prevDone.current = done;
   }, [done]);
 
-  // 좌우 스와이프: 오른쪽 = 다음 단계, 왼쪽 = 완료 보내기/되돌리기
+  // 열림/닫힘 목표 위치로 애니메이션 (드래그 중이 아닐 때: 외부에서 닫혔을 때 포함)
+  useEffect(() => {
+    Animated.spring(translateX, {
+      toValue: isSwipeOpen ? REVEAL_WIDTH : 0,
+      useNativeDriver: true,
+      bounciness: 4,
+    }).start();
+  }, [isSwipeOpen]);
+
+  // 오른쪽으로 쓸면 삭제 버튼 노출, 열린 상태에서 왼쪽으로 쓸면 닫힘
   const swipe = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, g) =>
-        Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 1.6,
+        Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.6,
+      onPanResponderGrant: () => {
+        startXRef.current = isSwipeOpen ? REVEAL_WIDTH : 0;
+      },
       onPanResponderMove: (_, g) => {
         swipingRef.current = true;
-        translateX.setValue(Math.max(-100, Math.min(100, g.dx)));
+        translateX.setValue(clamp(startXRef.current + g.dx, 0, REVEAL_WIDTH));
       },
       onPanResponderRelease: (_, g) => {
-        const t = itemRef.current;
-        if (g.dx > 70 && !isDone(t)) onAdvance(t.id);
-        else if (g.dx < -70) {
-          if (isDone(t) && !t.archived) onSetArchived(t.id, true);
-          else if (t.archived) onSetArchived(t.id, false);
-        }
+        const finalX = clamp(startXRef.current + g.dx, 0, REVEAL_WIDTH);
+        const shouldOpen = finalX > REVEAL_WIDTH * 0.4;
+        if (shouldOpen && !isSwipeOpen) hapticStep();
+        onSwipeOpenChange(shouldOpen);
         swipingRef.current = false;
         lastSwipeAt.current = Date.now();
-        Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
       },
       onPanResponderTerminate: () => {
+        onSwipeOpenChange(false);
         swipingRef.current = false;
         lastSwipeAt.current = Date.now();
-        Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
       },
     }),
   ).current;
 
-  // 스와이프 직후의 탭/롱프레스 오인식 방지
+  // 스와이프 직후의 탭/롱프레스 오인식 방지 + 열려 있으면 탭으로 닫기
   const guardedEdit = () => {
     if (swipingRef.current || Date.now() - lastSwipeAt.current < 400) return;
+    if (anySwipeOpen) {
+      onSwipeOpenChange(false);
+      return;
+    }
     onEdit();
   };
   const guardedDrag = () => {
     if (swipingRef.current || Date.now() - lastSwipeAt.current < 400) return;
+    if (anySwipeOpen) {
+      onSwipeOpenChange(false);
+      return;
+    }
     onStartDrag();
   };
 
@@ -104,93 +129,133 @@ export default function TodoRow({
     remLabel;
 
   return (
-    <Animated.View
-      onLayout={onLayout}
-      {...swipe.panHandlers}
-      style={[s.row, isDragging && s.rowDragging, { transform: [{ translateX }] }]}
-    >
-      <Pressable
-        style={s.rowInner}
-        onPress={guardedEdit}
-        onLongPress={sortLocked ? undefined : guardedDrag}
-        onPressOut={onPressOut}
-        delayLongPress={220}
+    <View style={s.rowWrap} onLayout={onLayout}>
+      <View style={s.deleteLayer}>
+        <Pressable
+          testID={`delete-${item.id}`}
+          accessibilityLabel="삭제"
+          style={s.deleteBtn}
+          onPress={() => onDeleteSwipe(item.id)}
+        >
+          <Text style={s.deleteIcon}>🗑️</Text>
+          <Text style={s.deleteLabel}>삭제</Text>
+        </Pressable>
+      </View>
+      <Animated.View
+        {...swipe.panHandlers}
+        style={[s.row, isDragging && s.rowDragging, { transform: [{ translateX }] }]}
       >
-        <Animated.View style={{ transform: [{ scale: eggScale }] }}>
-          <EggIcon total={item.totalSteps} done={item.doneSteps} />
-        </Animated.View>
-        <View style={s.rowBody}>
-          <Text style={[s.rowText, done && s.rowTextDone]}>
-            {item.title}
-            {item.repeat ? ' 🔁' : ''}
-          </Text>
-          {hasMeta && !done && (
-            <View style={s.progressRow}>
-              {item.dueDate && (
-                <Text style={[s.dueBadge, overdue && s.dueBadgeOver]}>
-                  📅 {Number(item.dueDate.slice(5, 7))}/{Number(item.dueDate.slice(8, 10))}
-                  {overdue ? ' 지남!' : ''}
-                </Text>
-              )}
-              {remLabel && <Text style={s.dueBadge}>⏰ {remLabel}</Text>}
-              {item.totalSteps > 1 && (
-                <>
-                  {Array.from({ length: item.totalSteps }, (_, i) => (
-                    <View
-                      key={i}
-                      style={[s.progressDot, i < item.doneSteps && s.progressDotDone]}
-                    />
-                  ))}
-                  <Text style={s.progressText}>
-                    {item.doneSteps}/{item.totalSteps} 단계
+        <Pressable
+          style={s.rowInner}
+          onPress={guardedEdit}
+          onLongPress={sortLocked ? undefined : guardedDrag}
+          onPressOut={onPressOut}
+          delayLongPress={220}
+        >
+          <Animated.View style={{ transform: [{ scale: eggScale }] }}>
+            <EggIcon total={item.totalSteps} done={item.doneSteps} />
+          </Animated.View>
+          <View style={s.rowBody}>
+            <Text style={[s.rowText, done && s.rowTextDone]}>
+              {item.title}
+              {item.repeat ? ' 🔁' : ''}
+            </Text>
+            {hasMeta && !done && (
+              <View style={s.progressRow}>
+                {item.dueDate && (
+                  <Text style={[s.dueBadge, overdue && s.dueBadgeOver]}>
+                    📅 {Number(item.dueDate.slice(5, 7))}/{Number(item.dueDate.slice(8, 10))}
+                    {overdue ? ' 지남!' : ''}
                   </Text>
-                </>
-              )}
-              {current?.text || current?.attachments?.length ? (
-                <Text style={s.stepHint} numberOfLines={1}>
-                  {item.totalSteps > 1 || item.dueDate || remLabel ? ' · ' : ''}
-                  {current.text}
-                  {current.attachments?.length ? ` 📎${current.attachments.length}` : ''}
-                </Text>
-              ) : null}
-            </View>
-          )}
-        </View>
-      </Pressable>
-      {!done ? (
-        <Pressable
-          accessibilityLabel="다음 단계"
-          style={s.nextBtn}
-          onPress={() => onAdvance(item.id)}
-          hitSlop={6}
-        >
-          <Text style={s.nextBtnText}>{isStarted(item) ? '❯' : '▶'}</Text>
+                )}
+                {remLabel && <Text style={s.dueBadge}>⏰ {remLabel}</Text>}
+                {item.totalSteps > 1 && (
+                  <>
+                    {Array.from({ length: item.totalSteps }, (_, i) => (
+                      <View
+                        key={i}
+                        style={[s.progressDot, i < item.doneSteps && s.progressDotDone]}
+                      />
+                    ))}
+                    <Text style={s.progressText}>
+                      {item.doneSteps}/{item.totalSteps} 단계
+                    </Text>
+                  </>
+                )}
+                {current?.text || current?.attachments?.length ? (
+                  <Text style={s.stepHint} numberOfLines={1}>
+                    {item.totalSteps > 1 || item.dueDate || remLabel ? ' · ' : ''}
+                    {current.text}
+                    {current.attachments?.length ? ` 📎${current.attachments.length}` : ''}
+                  </Text>
+                ) : null}
+              </View>
+            )}
+          </View>
         </Pressable>
-      ) : !item.archived ? (
-        <Pressable
-          accessibilityLabel="완료로 보내기"
-          style={s.archiveBtn}
-          onPress={() => onSetArchived(item.id, true)}
-          hitSlop={6}
-        >
-          <Text style={s.nextBtnText}>✓</Text>
-        </Pressable>
-      ) : (
-        <Pressable
-          accessibilityLabel="되돌리기"
-          style={s.unarchiveBtn}
-          onPress={() => onSetArchived(item.id, false)}
-          hitSlop={6}
-        >
-          <Text style={s.unarchiveBtnText}>↩</Text>
-        </Pressable>
-      )}
-    </Animated.View>
+        {!done ? (
+          <Pressable
+            accessibilityLabel="다음 단계"
+            style={s.nextBtn}
+            onPress={() => onAdvance(item.id)}
+            hitSlop={6}
+          >
+            <Text style={s.nextBtnText}>{isStarted(item) ? '❯' : '▶'}</Text>
+          </Pressable>
+        ) : !item.archived ? (
+          <Pressable
+            accessibilityLabel="완료로 보내기"
+            style={s.archiveBtn}
+            onPress={() => onSetArchived(item.id, true)}
+            hitSlop={6}
+          >
+            <Text style={s.nextBtnText}>✓</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            accessibilityLabel="되돌리기"
+            style={s.unarchiveBtn}
+            onPress={() => onSetArchived(item.id, false)}
+            hitSlop={6}
+          >
+            <Text style={s.unarchiveBtnText}>↩</Text>
+          </Pressable>
+        )}
+      </Animated.View>
+    </View>
   );
 }
 
 const makeStyles = (C) =>
   StyleSheet.create({
+  rowWrap: {
+    position: 'relative',
+    marginTop: 8,
+  },
+  deleteLayer: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: REVEAL_WIDTH,
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: C.danger,
+  },
+  deleteBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteIcon: {
+    fontSize: 18,
+  },
+  deleteLabel: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -200,7 +265,6 @@ const makeStyles = (C) =>
     borderColor: C.border,
     paddingVertical: 12,
     paddingHorizontal: 13,
-    marginTop: 8,
   },
   rowInner: {
     flex: 1,

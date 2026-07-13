@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import Chip from './Chip';
@@ -197,6 +198,8 @@ export default function DayView({ todos, allTodos, categories, weeklyGoal }) {
       : `rgba(255, 158, 44, ${Math.min(0.2 + n * 0.2, 0.85)})`;
 
   // ---- 연못: 지금까지 부화시킨 오리들 (모든 페이지)
+  const [pondQuery, setPondQuery] = useState('');
+
   const hatched = useMemo(() => {
     const list = (allTodos ?? todos)
       .filter((t) => t.doneSteps >= t.totalSteps)
@@ -204,15 +207,33 @@ export default function DayView({ todos, allTodos, categories, weeklyGoal }) {
         const doneEntry = [...(t.timeline ?? [])]
           .reverse()
           .find((e) => e.step === 'done');
+        const cat = t.categoryId ? catById[t.categoryId] : null;
         return {
           id: t.id,
           title: t.title,
+          totalSteps: t.totalSteps,
+          categoryName: cat?.name ?? null,
+          categoryColor: cat?.color ?? null,
           at: doneEntry ? new Date(doneEntry.at) : null,
         };
       })
       .sort((a, b) => (b.at?.getTime() ?? 0) - (a.at?.getTime() ?? 0));
     return list;
-  }, [allTodos, todos]);
+  }, [allTodos, todos, catById]);
+
+  const pondQ = pondQuery.trim().toLowerCase();
+  const filteredHatched = pondQ
+    ? hatched.filter((h) => h.title.toLowerCase().includes(pondQ))
+    : hatched;
+
+  const newThisWeek = useMemo(() => {
+    const start = week.start.getTime();
+    return hatched.filter((h) => h.at && h.at.getTime() >= start).length;
+  }, [hatched, week]);
+
+  const MILESTONES = [1, 5, 10, 25, 50, 100, 200, 500, 1000];
+  const currentMilestone = [...MILESTONES].reverse().find((m) => hatched.length >= m);
+  const nextMilestone = MILESTONES.find((m) => m > hatched.length);
 
   const hashPos = (id, salt) => {
     let h = 7;
@@ -220,6 +241,14 @@ export default function DayView({ todos, allTodos, categories, weeklyGoal }) {
     for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
     return h % 100;
   };
+
+  const POND_DECOR = [
+    { emoji: '🪷', left: '10%', top: '80%', size: 26 },
+    { emoji: '🪷', left: '78%', top: '86%', size: 20 },
+    { emoji: '🌿', left: '4%', top: '8%', size: 24, rotate: '-15deg' },
+    { emoji: '🌾', left: '88%', top: '6%', size: 26, rotate: '12deg' },
+    { emoji: '☀️', left: '85%', top: '4%', size: 22 },
+  ];
 
   return (
     <View style={s.container}>
@@ -452,19 +481,63 @@ export default function DayView({ todos, allTodos, categories, weeklyGoal }) {
 
       {mode === 'pond' && (
         <ScrollView style={s.body}>
-          <Text style={s.pondCount}>
-            지금까지 {hatched.length}마리를 부화시켰어요, 꽥! 🎉
-          </Text>
+          <View style={s.pondHeadRow}>
+            <Text style={s.pondCount}>🐥 {hatched.length}마리</Text>
+            {newThisWeek > 0 && (
+              <Text style={s.pondNew}>이번 주 +{newThisWeek}마리</Text>
+            )}
+          </View>
+
+          {currentMilestone && (
+            <View style={s.milestoneBox}>
+              <Text style={s.milestoneText}>
+                🏅 {currentMilestone}마리 달성!
+                {nextMilestone
+                  ? ` 다음 목표 ${nextMilestone}마리까지 ${nextMilestone - hatched.length}마리 남았어요`
+                  : ' 최고 기록이에요, 꽥!'}
+              </Text>
+              {nextMilestone && (
+                <View style={s.goalTrack}>
+                  <View
+                    style={[
+                      s.goalFill,
+                      {
+                        width: `${Math.min(100, ((hatched.length - currentMilestone) / (nextMilestone - currentMilestone)) * 100)}%`,
+                      },
+                    ]}
+                  />
+                </View>
+              )}
+            </View>
+          )}
+
           <View style={s.pondCard}>
-            <Text style={s.pondDeco}>🪷</Text>
-            <Text style={[s.pondDeco, { left: '72%', top: '12%' }]}>🌿</Text>
-            {hatched.slice(0, 40).map((h, idx) => {
-              // 격자 배치 + 약간의 흔들림: 오리끼리 겹치지 않게
+            <View style={[s.pondBand, s.pondBandTop]} />
+            <View style={[s.pondBand, s.pondBandBottom]} />
+            {POND_DECOR.map((d, i) => (
+              <Text
+                key={i}
+                style={[
+                  s.pondDeco,
+                  {
+                    left: d.left,
+                    top: d.top,
+                    fontSize: d.size,
+                    transform: d.rotate ? [{ rotate: d.rotate }] : undefined,
+                  },
+                ]}
+              >
+                {d.emoji}
+              </Text>
+            ))}
+            {filteredHatched.slice(0, 40).map((h, idx) => {
+              // 격자 배치 + 약간의 흔들림·회전: 오리끼리 겹치지 않게, 자연스럽게
               const col = idx % 5;
               const row = Math.floor(idx / 5);
               const left = 4 + col * 18 + (hashPos(h.id, 'x') % 7);
-              const top = 4 + row * 11 + (hashPos(h.id, 'y') % 5);
+              const top = 6 + row * 11 + (hashPos(h.id, 'y') % 5);
               const size = 30 + (hashPos(h.id, 's') % 10);
+              const rotate = (hashPos(h.id, 'r') % 17) - 8;
               return (
                 <Pressable
                   key={h.id}
@@ -473,10 +546,14 @@ export default function DayView({ todos, allTodos, categories, weeklyGoal }) {
                   style={{ position: 'absolute', left: `${left}%`, top: `${top}%` }}
                   hitSlop={4}
                 >
+                  <View style={[s.duckShadow, { width: size * 0.8, height: size * 0.28 }]} />
                   <Image
                     source={require('../assets/chick.png')}
-                    style={{ width: size, height: size }}
+                    style={{ width: size, height: size, transform: [{ rotate: `${rotate}deg` }] }}
                   />
+                  {h.categoryColor && (
+                    <View style={[s.duckCatDot, { backgroundColor: h.categoryColor }]} />
+                  )}
                 </Pressable>
               );
             })}
@@ -488,7 +565,25 @@ export default function DayView({ todos, allTodos, categories, weeklyGoal }) {
                 </Text>
               </View>
             )}
+            {hatched.length > 0 && filteredHatched.length === 0 && (
+              <View style={s.pondEmpty}>
+                <Text style={s.pondEmptyText}>그런 오리는 없어요, 꽥!</Text>
+              </View>
+            )}
           </View>
+
+          {hatched.length > 8 && (
+            <View style={s.pondSearchBar}>
+              <TextInput
+                style={s.pondSearchInput}
+                value={pondQuery}
+                onChangeText={setPondQuery}
+                placeholder="부화시킨 오리 이름으로 검색..."
+                placeholderTextColor={C.faint}
+              />
+            </View>
+          )}
+
           {selectedDuck && (
             <View style={s.duckInfo}>
               <Image source={require('../assets/chick.png')} style={s.duckInfoImg} />
@@ -498,11 +593,20 @@ export default function DayView({ todos, allTodos, categories, weeklyGoal }) {
                   {selectedDuck.at
                     ? `${selectedDuck.at.getFullYear()}.${selectedDuck.at.getMonth() + 1}.${selectedDuck.at.getDate()} 부화`
                     : '부화 시각 기록 없음'}
+                  {selectedDuck.totalSteps > 1 ? ` · ${selectedDuck.totalSteps}단계` : ''}
                 </Text>
+                {selectedDuck.categoryName && (
+                  <View style={s.duckInfoCatRow}>
+                    <View
+                      style={[s.titleDot, { backgroundColor: selectedDuck.categoryColor }]}
+                    />
+                    <Text style={s.duckInfoCat}>{selectedDuck.categoryName}</Text>
+                  </View>
+                )}
               </View>
             </View>
           )}
-          {hatched.length > 40 && (
+          {filteredHatched.length > 40 && (
             <Text style={s.pondMore}>최근 40마리만 헤엄치고 있어요</Text>
           )}
         </ScrollView>
@@ -780,12 +884,37 @@ const makeStyles = (C) =>
     borderRadius: 5,
     backgroundColor: C.orange,
   },
-  pondCount: {
+  pondHeadRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
     marginHorizontal: 16,
     marginBottom: 8,
-    fontSize: 15,
+  },
+  pondCount: {
+    fontSize: 17,
     fontWeight: '800',
     color: C.text,
+  },
+  pondNew: {
+    marginLeft: 8,
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.orange,
+  },
+  milestoneBox: {
+    marginHorizontal: 12,
+    marginBottom: 10,
+    backgroundColor: C.card,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    padding: 12,
+  },
+  milestoneText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.sub,
+    marginBottom: 6,
   },
   pondCard: {
     marginHorizontal: 12,
@@ -796,11 +925,58 @@ const makeStyles = (C) =>
     backgroundColor: C.pond,
     overflow: 'hidden',
   },
+  pondBand: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+  },
+  pondBandTop: {
+    top: 0,
+    height: '45%',
+    backgroundColor: '#FFFFFF',
+    opacity: 0.16,
+  },
+  pondBandBottom: {
+    bottom: 0,
+    height: '30%',
+    backgroundColor: '#000000',
+    opacity: 0.08,
+  },
   pondDeco: {
     position: 'absolute',
-    left: '12%',
-    top: '78%',
-    fontSize: 26,
+    opacity: 0.85,
+  },
+  duckShadow: {
+    position: 'absolute',
+    bottom: 2,
+    left: '10%',
+    borderRadius: 999,
+    backgroundColor: '#000000',
+    opacity: 0.14,
+  },
+  duckCatDot: {
+    position: 'absolute',
+    right: -1,
+    bottom: -1,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+    borderWidth: 1.5,
+    borderColor: C.pond,
+  },
+  pondSearchBar: {
+    marginHorizontal: 12,
+    marginTop: 10,
+  },
+  pondSearchInput: {
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: C.inputBg,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    paddingHorizontal: 14,
+    fontSize: 14,
+    color: C.text,
   },
   pondEmpty: {
     flex: 1,
@@ -843,6 +1019,17 @@ const makeStyles = (C) =>
     marginTop: 2,
     fontSize: 12,
     color: C.sub,
+  },
+  duckInfoCatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  duckInfoCat: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.sub,
+    marginLeft: 3,
   },
   pondMore: {
     marginTop: 8,

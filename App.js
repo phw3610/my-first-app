@@ -55,6 +55,7 @@ export default function App() {
   const [editingId, setEditingId] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [dragging, setDragging] = useState(null);
+  const [swipeOpenId, setSwipeOpenId] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [inputFocused, setInputFocused] = useState(false);
@@ -664,7 +665,8 @@ export default function App() {
     if (newCat === id) setNewCat(null);
   };
 
-  const toggleCollapse = (key) =>
+  const toggleCollapse = (key) => {
+    setSwipeOpenId(null);
     setData((d) => ({
       ...d,
       collapsed: {
@@ -672,8 +674,10 @@ export default function App() {
         [key]: !(d.collapsed[key] ?? key === 'archived'),
       },
     }));
+  };
 
   const selectFilter = (f) => {
+    setSwipeOpenId(null);
     setFilter(f);
     setNewCat(f !== 'all' && f !== 'none' && f !== 'archived' ? f : null);
   };
@@ -703,7 +707,10 @@ export default function App() {
         <View style={styles.header}>
           <Pressable
             testID="mascot-btn"
-            onPress={() => setPage((p) => (p === 'day' ? 'list' : 'day'))}
+            onPress={() => {
+              setSwipeOpenId(null);
+              setPage((p) => (p === 'day' ? 'list' : 'day'));
+            }}
             hitSlop={8}
           >
             <Image source={require('./assets/mascot.png')} style={styles.mascot} />
@@ -739,7 +746,10 @@ export default function App() {
           <Pressable
             testID="menu-btn"
             style={styles.menuBtn}
-            onPress={() => setMenuOpen(true)}
+            onPress={() => {
+              setSwipeOpenId(null);
+              setMenuOpen(true);
+            }}
             hitSlop={6}
           >
             <Text style={styles.menuBtnText}>☰</Text>
@@ -795,6 +805,7 @@ export default function App() {
                   label="🔍"
                   active={searchOpen}
                   onPress={() => {
+                    setSwipeOpenId(null);
                     if (searchOpen) setQuery('');
                     setSearchOpen(!searchOpen);
                   }}
@@ -832,6 +843,7 @@ export default function App() {
                 onScroll={(e) => {
                   scrollOffsetRef.current = e.nativeEvent.contentOffset.y;
                 }}
+                onScrollBeginDrag={() => setSwipeOpenId(null)}
                 scrollEventThrottle={16}
               >
                 {sections.length === 0 ? (
@@ -878,6 +890,15 @@ export default function App() {
                             isDragging={dragging?.id === item.id}
                             sortLocked={sortMode === 'due' || sec.key === 'today'}
                             soundOn={data.settings?.soundOn !== false}
+                            isSwipeOpen={swipeOpenId === item.id}
+                            anySwipeOpen={swipeOpenId != null}
+                            onSwipeOpenChange={(open) =>
+                              setSwipeOpenId(open ? item.id : null)
+                            }
+                            onDeleteSwipe={(id) => {
+                              setSwipeOpenId(null);
+                              removeTodo(id);
+                            }}
                             onLayout={(e) => {
                               if (sec.key === 'today') return;
                               rowLayouts.current[item.id] = {
