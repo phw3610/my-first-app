@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
   Dimensions,
   Image,
   Pressable,
@@ -10,7 +11,29 @@ import {
   View,
 } from 'react-native';
 import Chip from './Chip';
+import { hapticStep } from './haptics';
+import PondDuck from './PondDuck';
 import { useTheme } from './theme';
+
+function Crumb({ x, y, onDone }) {
+  const opacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    Animated.timing(opacity, {
+      toValue: 0,
+      duration: 1600,
+      delay: 500,
+      useNativeDriver: true,
+    }).start(onDone);
+  }, []);
+  return (
+    <Animated.Text
+      pointerEvents="none"
+      style={{ position: 'absolute', left: x - 8, top: y - 8, fontSize: 15, opacity }}
+    >
+      🌾
+    </Animated.Text>
+  );
+}
 
 const HOUR_W = 60; // 1시간당 픽셀
 const CHART_W = 24 * HOUR_W;
@@ -78,6 +101,9 @@ export default function DayView({ todos, allTodos, categories, weeklyGoal }) {
   const [mode, setMode] = useState('day'); // 'day' | 'week' | 'month' | 'pond'
   const [date, setDate] = useState(startOfDay(new Date()));
   const [selectedDuck, setSelectedDuck] = useState(null);
+  const [pondSize, setPondSize] = useState({ width: 0, height: 0 });
+  const [feedSignal, setFeedSignal] = useState(null);
+  const [crumbs, setCrumbs] = useState([]);
   const chartRef = useRef(null);
 
   const dayStart = date.getTime();
@@ -242,13 +268,51 @@ export default function DayView({ todos, allTodos, categories, weeklyGoal }) {
     return h % 100;
   };
 
-  const POND_DECOR = [
-    { emoji: '🪷', left: '10%', top: '80%', size: 26 },
-    { emoji: '🪷', left: '78%', top: '86%', size: 20 },
-    { emoji: '🌿', left: '4%', top: '8%', size: 24, rotate: '-15deg' },
-    { emoji: '🌾', left: '88%', top: '6%', size: 26, rotate: '12deg' },
-    { emoji: '☀️', left: '85%', top: '4%', size: 22 },
-  ];
+  // 테두리를 둘러싼 풀/돌 장식: 윗쪽엔 풀, 아랫쪽엔 돌, 옆쪽엔 갈대
+  const POND_DECOR = useMemo(() => {
+    const items = [
+      { emoji: '☀️', left: '88%', top: '3%', size: 22 },
+      { emoji: '🪷', left: '14%', top: '82%', size: 24 },
+      { emoji: '🪷', left: '68%', top: '88%', size: 18 },
+    ];
+    const grassEmojis = ['🌿', '🌾'];
+    for (let i = 0; i < 6; i++) {
+      items.push({
+        emoji: grassEmojis[i % 2],
+        left: `${4 + i * 15}%`,
+        top: '0%',
+        size: 18 + (i % 3) * 4,
+        rotate: `${(i % 2 ? 1 : -1) * (8 + i * 2)}deg`,
+      });
+    }
+    for (let i = 0; i < 5; i++) {
+      items.push({
+        emoji: '🪨',
+        left: `${8 + i * 19}%`,
+        top: '90%',
+        size: 16 + (i % 2) * 6,
+      });
+    }
+    items.push({ emoji: '🌾', left: '2%', top: '40%', size: 20, rotate: '-20deg' });
+    items.push({ emoji: '🌾', left: '95%', top: '55%', size: 20, rotate: '20deg' });
+    return items;
+  }, []);
+
+  const handleFeed = () => {
+    if (!pondSize.width) return;
+    hapticStep();
+    const fx = pondSize.width / 2;
+    const fy = pondSize.height * 0.88;
+    setFeedSignal({ token: Date.now(), until: Date.now() + 5000 });
+    setCrumbs((prev) => [
+      ...prev,
+      ...[0, 1, 2].map((i) => ({
+        id: Date.now() + i,
+        x: fx + (Math.random() - 0.5) * 46,
+        y: fy + (Math.random() - 0.5) * 18,
+      })),
+    ]);
+  };
 
   return (
     <View style={s.container}>
@@ -511,7 +575,13 @@ export default function DayView({ todos, allTodos, categories, weeklyGoal }) {
             </View>
           )}
 
-          <View style={s.pondCard}>
+          <View
+            style={s.pondCard}
+            onLayout={(e) => {
+              const { width, height } = e.nativeEvent.layout;
+              setPondSize({ width, height });
+            }}
+          >
             <View style={[s.pondBand, s.pondBandTop]} />
             <View style={[s.pondBand, s.pondBandBottom]} />
             {POND_DECOR.map((d, i) => (
@@ -530,33 +600,25 @@ export default function DayView({ todos, allTodos, categories, weeklyGoal }) {
                 {d.emoji}
               </Text>
             ))}
-            {filteredHatched.slice(0, 40).map((h, idx) => {
-              // 격자 배치 + 약간의 흔들림·회전: 오리끼리 겹치지 않게, 자연스럽게
-              const col = idx % 5;
-              const row = Math.floor(idx / 5);
-              const left = 4 + col * 18 + (hashPos(h.id, 'x') % 7);
-              const top = 6 + row * 11 + (hashPos(h.id, 'y') % 5);
-              const size = 30 + (hashPos(h.id, 's') % 10);
-              const rotate = (hashPos(h.id, 'r') % 17) - 8;
-              return (
-                <Pressable
+            {pondSize.width > 0 &&
+              filteredHatched.slice(0, 40).map((h) => (
+                <PondDuck
                   key={h.id}
-                  testID={`duck-${h.id}`}
-                  onPress={() => setSelectedDuck(h)}
-                  style={{ position: 'absolute', left: `${left}%`, top: `${top}%` }}
-                  hitSlop={4}
-                >
-                  <View style={[s.duckShadow, { width: size * 0.8, height: size * 0.28 }]} />
-                  <Image
-                    source={require('../assets/chick.png')}
-                    style={{ width: size, height: size, transform: [{ rotate: `${rotate}deg` }] }}
-                  />
-                  {h.categoryColor && (
-                    <View style={[s.duckCatDot, { backgroundColor: h.categoryColor }]} />
-                  )}
-                </Pressable>
-              );
-            })}
+                  duck={h}
+                  pondSize={pondSize}
+                  feedSignal={feedSignal}
+                  onSelect={setSelectedDuck}
+                  baseSize={30 + (hashPos(h.id, 's') % 10)}
+                />
+              ))}
+            {crumbs.map((c) => (
+              <Crumb
+                key={c.id}
+                x={c.x}
+                y={c.y}
+                onDone={() => setCrumbs((prev) => prev.filter((p) => p.id !== c.id))}
+              />
+            ))}
             {hatched.length === 0 && (
               <View style={s.pondEmpty}>
                 <Image source={require('../assets/egg-0.png')} style={s.pondEmptyEgg} />
@@ -571,6 +633,12 @@ export default function DayView({ todos, allTodos, categories, weeklyGoal }) {
               </View>
             )}
           </View>
+
+          {hatched.length > 0 && (
+            <Pressable testID="feed-btn" style={s.feedBtn} onPress={handleFeed}>
+              <Text style={s.feedBtnText}>🌾 먹이 주기</Text>
+            </Pressable>
+          )}
 
           {hatched.length > 8 && (
             <View style={s.pondSearchBar}>
@@ -946,23 +1014,18 @@ const makeStyles = (C) =>
     position: 'absolute',
     opacity: 0.85,
   },
-  duckShadow: {
-    position: 'absolute',
-    bottom: 2,
-    left: '10%',
-    borderRadius: 999,
-    backgroundColor: '#000000',
-    opacity: 0.14,
+  feedBtn: {
+    marginHorizontal: 12,
+    marginTop: 10,
+    backgroundColor: C.orange,
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
   },
-  duckCatDot: {
-    position: 'absolute',
-    right: -1,
-    bottom: -1,
-    width: 9,
-    height: 9,
-    borderRadius: 4.5,
-    borderWidth: 1.5,
-    borderColor: C.pond,
+  feedBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
   },
   pondSearchBar: {
     marginHorizontal: 12,
