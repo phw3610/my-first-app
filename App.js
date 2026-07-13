@@ -136,10 +136,13 @@ export default function App() {
     if (loaded) saveData(data);
   }, [data, loaded]);
 
-  // 남은 알 개수를 앱 아이콘 배지로
+  // 남은 알 개수를 앱 아이콘 배지로 (옵션, 기본 꺼짐 — 꺼져 있으면 배지를 지운다)
   useEffect(() => {
     if (!loaded) return;
-    updateBadge(data.todos.filter((t) => !t.archived && !isDone(t)).length);
+    const count = data.settings?.badgeOn
+      ? data.todos.filter((t) => !t.archived && !isDone(t)).length
+      : 0;
+    updateBadge(count);
   }, [data, loaded]);
 
   // 백그라운드로 가면 다시 잠금

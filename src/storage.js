@@ -19,6 +19,7 @@ export const emptyData = {
     weeklyGoal: null,
     weeklyReport: false,
     lockEnabled: false,
+    badgeOn: false,
   },
 };
 

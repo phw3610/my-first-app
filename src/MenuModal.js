@@ -375,6 +375,19 @@ export default function MenuModal({
                 <Text style={s.smallBtnText}>적용</Text>
               </Pressable>
             </View>
+            <Text style={s.settingLabel}>앱 아이콘 배지 (남은 알 개수 표시)</Text>
+            <View style={s.chipRow}>
+              <Chip
+                label="켬"
+                active={!!settings.badgeOn}
+                onPress={() => onUpdateSettings({ badgeOn: true })}
+              />
+              <Chip
+                label="끔"
+                active={!settings.badgeOn}
+                onPress={() => onUpdateSettings({ badgeOn: false })}
+              />
+            </View>
             <Text style={s.settingLabel}>주간 리포트 알림 (일요일 저녁 8시)</Text>
             <View style={s.chipRow}>
               <Chip
