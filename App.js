@@ -56,6 +56,8 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [dragging, setDragging] = useState(null);
   const [swipeOpenId, setSwipeOpenId] = useState(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [inputFocused, setInputFocused] = useState(false);
@@ -251,6 +253,7 @@ export default function App() {
   const hasUncategorized = active.some((t) => !catById[t.categoryId]);
 
   // 진행 중 먼저, 완료는 뒤로. 마감일순 모드면 진행 중을 마감일 오름차순으로.
+  // 고정(pinned)은 그 안에서 항상 최상단으로(안정 정렬이라 상대 순서는 유지).
   const orderTodos = (list) => {
     const act = list.filter((t) => !isDone(t));
     const dn = list.filter(isDone);
@@ -259,6 +262,7 @@ export default function App() {
         (a.dueDate ?? '9999-99-99').localeCompare(b.dueDate ?? '9999-99-99'),
       );
     }
+    act.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
     return [...act, ...dn];
   };
 
@@ -409,6 +413,9 @@ export default function App() {
     repeat: null,
     dueDate: null,
     lastSpawnedDate: null,
+    important: false,
+    pinned: false,
+    note: '',
     createdAt: Date.now(),
   });
 
@@ -608,6 +615,57 @@ export default function App() {
     });
   };
 
+  const toggleSelectMode = () => {
+    setSwipeOpenId(null);
+    setSelectedIds([]);
+    setSelectMode((v) => !v);
+  };
+
+  const toggleSelect = (id) =>
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+
+  const bulkDelete = () => {
+    if (selectedIds.length === 0) return;
+    const ids = selectedIds;
+    const removed = todos.filter((t) => ids.includes(t.id));
+    removed.forEach((t) => cancelReminder(t.reminder?.notificationId));
+    setData((d) => ({ ...d, todos: d.todos.filter((t) => !ids.includes(t.id)) }));
+    setSelectedIds([]);
+    setSelectMode(false);
+    showUndo(`${removed.length}개 삭제했어요`, () => {
+      setData((d) => ({ ...d, todos: [...removed, ...d.todos] }));
+      removed.forEach((t) => {
+        if (t.reminder?.at && new Date(t.reminder.at) > new Date()) {
+          scheduleReminder(t.title, new Date(t.reminder.at))
+            .then((nid) =>
+              setData((d) => ({
+                ...d,
+                todos: d.todos.map((x) =>
+                  x.id === t.id
+                    ? { ...x, reminder: { at: t.reminder.at, notificationId: nid } }
+                    : x,
+                ),
+              })),
+            )
+            .catch(() => {});
+        }
+      });
+    });
+  };
+
+  const bulkMove = (categoryId) => {
+    if (selectedIds.length === 0) return;
+    const ids = selectedIds;
+    setData((d) => ({
+      ...d,
+      todos: d.todos.map((t) => (ids.includes(t.id) ? { ...t, categoryId } : t)),
+    }));
+    setSelectedIds([]);
+    setSelectMode(false);
+  };
+
   const importBackup = async (rawData) => {
     const imported = normalizeData(rawData);
     await Promise.all(data.todos.map((t) => cancelReminder(t.reminder?.notificationId)));
@@ -762,6 +820,7 @@ export default function App() {
             allTodos={todos}
             categories={categories}
             weeklyGoal={data.settings?.weeklyGoal}
+            onOpenTodo={(id) => setEditingId(id)}
           />
         ) : (
           <>
@@ -810,6 +869,14 @@ export default function App() {
                     setSearchOpen(!searchOpen);
                   }}
                 />
+                {visibleTodos.length > 0 && (
+                  <Chip
+                    testID="select-toggle"
+                    label={selectMode ? '선택 취소' : '선택'}
+                    active={selectMode}
+                    onPress={toggleSelectMode}
+                  />
+                )}
               </ScrollView>
             </View>
 
@@ -888,8 +955,11 @@ export default function App() {
                             key={`${sec.key}:${item.id}`}
                             item={item}
                             isDragging={dragging?.id === item.id}
-                            sortLocked={sortMode === 'due' || sec.key === 'today'}
+                            sortLocked={sortMode === 'due' || sec.key === 'today' || selectMode}
                             soundOn={data.settings?.soundOn !== false}
+                            selectMode={selectMode}
+                            selected={selectedIds.includes(item.id)}
+                            onToggleSelect={toggleSelect}
                             isSwipeOpen={swipeOpenId === item.id}
                             anySwipeOpen={swipeOpenId != null}
                             onSwipeOpenChange={(open) =>
@@ -934,6 +1004,33 @@ export default function App() {
               )}
             </View>
 
+            {selectMode ? (
+              <View style={styles.selectionBar}>
+                <Text style={styles.selectionCount}>{selectedIds.length}개 선택됨</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.selectionMoveRow}
+                >
+                  <Chip label="없음" onPress={() => bulkMove(null)} />
+                  {categories.map((c) => (
+                    <Chip
+                      key={c.id}
+                      label={c.name}
+                      color={c.color}
+                      onPress={() => bulkMove(c.id)}
+                    />
+                  ))}
+                </ScrollView>
+                <Pressable
+                  testID="bulk-delete-btn"
+                  style={styles.selectionDeleteBtn}
+                  onPress={bulkDelete}
+                >
+                  <Text style={styles.selectionDeleteText}>삭제</Text>
+                </Pressable>
+              </View>
+            ) : (
             <View style={styles.inputArea}>
               {showOptions && (
                 <>
@@ -1006,6 +1103,7 @@ export default function App() {
                 </Pressable>
               </View>
             </View>
+            )}
           </>
         )}
       </KeyboardAvoidingView>
@@ -1318,6 +1416,37 @@ const makeStyles = (C) =>
     paddingHorizontal: 16,
     paddingTop: 10,
     paddingBottom: 12,
+  },
+  selectionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: C.barBg,
+    borderTopWidth: 1.5,
+    borderTopColor: C.border,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  selectionCount: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: C.text,
+    marginRight: 8,
+  },
+  selectionMoveRow: {
+    flex: 1,
+  },
+  selectionDeleteBtn: {
+    marginLeft: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: C.danger,
+  },
+  selectionDeleteText: {
+    color: C.danger,
+    fontWeight: '700',
+    fontSize: 13,
   },
   optionRow: {
     flexDirection: 'row',

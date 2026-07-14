@@ -44,6 +44,20 @@ export async function pickPhotoAttachment() {
   return { type: 'photo', name, uri };
 }
 
+export async function pickCameraAttachment() {
+  const ImagePicker = require('expo-image-picker');
+  if (Platform.OS !== 'web') {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') throw new Error('카메라 권한이 필요해요');
+  }
+  const res = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 });
+  if (res.canceled) return null;
+  const asset = res.assets[0];
+  const name = asset.fileName || `photo-${Date.now()}.jpg`;
+  const uri = await copyToStorage(asset.uri, name);
+  return { type: 'photo', name, uri };
+}
+
 export async function openAttachment(attachment) {
   if (!attachment.uri) return; // 백업에서 복원되어 파일 실체가 없는 경우
   if (attachment.type === 'link') {

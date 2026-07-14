@@ -12,6 +12,7 @@ import {
   attachmentIcon,
   makeLinkAttachment,
   openAttachment,
+  pickCameraAttachment,
   pickFileAttachment,
   pickPhotoAttachment,
 } from './attachments';
@@ -43,6 +44,9 @@ export default function EditTodoModal({
   const s = useMemo(() => makeStyles(C), [C]);
   const [title, setTitle] = useState(todo.title);
   const [categoryId, setCategoryId] = useState(todo.categoryId);
+  const [important, setImportant] = useState(!!todo.important);
+  const [pinned, setPinned] = useState(!!todo.pinned);
+  const [note, setNote] = useState(todo.note ?? '');
   const [steps, setSteps] = useState(resizeSteps(todo.steps ?? [], todo.totalSteps));
   const [doneSteps, setDoneSteps] = useState(todo.doneSteps);
   const [chooserFor, setChooserFor] = useState(null);
@@ -98,7 +102,18 @@ export default function EditTodoModal({
     }
   };
 
+  const addCamera = async (i) => {
+    setChooserFor(null);
+    try {
+      addAttachment(i, await pickCameraAttachment());
+    } catch (e) {
+      setMsg(e.message);
+    }
+  };
+
   const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+  const MONTHDAYS = [1, 5, 10, 15, 20, 25, 31];
+  const fmtMonthDay = (n) => (n === 31 ? '말일' : `${n}일`);
 
   const toggleWeekday = (d) => {
     const days = repeat?.days ?? [];
@@ -189,6 +204,25 @@ export default function EditTodoModal({
               placeholderTextColor={C.faint}
             />
 
+            <View style={[s.chipRow, s.markRow]}>
+              <Chip
+                label="⭐ 중요"
+                active={important}
+                onPress={() => setImportant(!important)}
+              />
+              <Chip label="📌 고정" active={pinned} onPress={() => setPinned(!pinned)} />
+            </View>
+
+            <Text style={s.label}>메모</Text>
+            <TextInput
+              style={s.noteInput}
+              value={note}
+              onChangeText={setNote}
+              placeholder="이 할 일에 대한 자유 메모..."
+              placeholderTextColor={C.faint}
+              multiline
+            />
+
             <Text style={s.label}>분류</Text>
             <View style={s.chipRow}>
               <Chip label="없음" active={!categoryId} onPress={() => setCategoryId(null)} />
@@ -252,6 +286,7 @@ export default function EditTodoModal({
                       }}
                     />
                     <Chip label="🖼️ 사진" onPress={() => addPhoto(i)} />
+                    <Chip label="📷 촬영" onPress={() => addCamera(i)} />
                     <Chip label="📄 파일" onPress={() => addFile(i)} />
                   </View>
                 )}
@@ -354,6 +389,13 @@ export default function EditTodoModal({
                 active={repeat?.kind === 'weekly'}
                 onPress={() => setRepeat({ kind: 'weekly', days: repeat?.days ?? [] })}
               />
+              <Chip
+                label="매달"
+                active={repeat?.kind === 'monthly'}
+                onPress={() =>
+                  setRepeat({ kind: 'monthly', dayOfMonth: repeat?.dayOfMonth ?? 1 })
+                }
+              />
             </View>
             {repeat?.kind === 'weekly' && (
               <View style={[s.chipRow, s.weekdayRow]}>
@@ -363,6 +405,18 @@ export default function EditTodoModal({
                     label={name}
                     active={(repeat.days ?? []).includes(d)}
                     onPress={() => toggleWeekday(d)}
+                  />
+                ))}
+              </View>
+            )}
+            {repeat?.kind === 'monthly' && (
+              <View style={[s.chipRow, s.weekdayRow]}>
+                {MONTHDAYS.map((n) => (
+                  <Chip
+                    key={n}
+                    label={fmtMonthDay(n)}
+                    active={repeat.dayOfMonth === n}
+                    onPress={() => setRepeat({ kind: 'monthly', dayOfMonth: n })}
                   />
                 ))}
               </View>
@@ -423,6 +477,9 @@ export default function EditTodoModal({
                   onSave({
                     title: title.trim() || todo.title,
                     categoryId,
+                    important,
+                    pinned,
+                    note,
                     totalSteps,
                     steps,
                     doneSteps: done,
@@ -484,10 +541,23 @@ const makeStyles = (C) =>
     fontWeight: '700',
     color: C.faint,
   },
+  noteInput: {
+    minHeight: 64,
+    borderRadius: 12,
+    backgroundColor: C.inputBg,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: C.text,
+    textAlignVertical: 'top',
+  },
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     rowGap: 6,
+  },
+  markRow: {
+    marginTop: 10,
   },
   stepBlock: {
     marginBottom: 8,

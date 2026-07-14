@@ -32,6 +32,9 @@ export default function TodoRow({
   onAdvance,
   onSetArchived,
   soundOn,
+  selectMode,
+  selected,
+  onToggleSelect,
 }) {
   const C = useTheme();
   const s = useMemo(() => makeStyles(C), [C]);
@@ -44,6 +47,11 @@ export default function TodoRow({
   const swipingRef = useRef(false);
   const lastSwipeAt = useRef(0);
   const startXRef = useRef(0);
+  // PanResponder 콜백은 최초 렌더 시점 클로저에 갇히므로, 매 렌더마다 최신값을 ref로 반영해 참조한다.
+  const selectModeRef = useRef(selectMode);
+  selectModeRef.current = selectMode;
+  const isSwipeOpenRef = useRef(isSwipeOpen);
+  isSwipeOpenRef.current = isSwipeOpen;
 
   // 부화 순간: 햅틱 + 알이 통통 튀는 애니메이션
   useEffect(() => {
@@ -76,9 +84,11 @@ export default function TodoRow({
   const swipe = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, g) =>
-        Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.6,
+        !selectModeRef.current &&
+        Math.abs(g.dx) > 12 &&
+        Math.abs(g.dx) > Math.abs(g.dy) * 1.6,
       onPanResponderGrant: () => {
-        startXRef.current = isSwipeOpen ? REVEAL_WIDTH : 0;
+        startXRef.current = isSwipeOpenRef.current ? REVEAL_WIDTH : 0;
       },
       onPanResponderMove: (_, g) => {
         swipingRef.current = true;
@@ -87,7 +97,7 @@ export default function TodoRow({
       onPanResponderRelease: (_, g) => {
         const finalX = clamp(startXRef.current + g.dx, 0, REVEAL_WIDTH);
         const shouldOpen = finalX > REVEAL_WIDTH * 0.4;
-        if (shouldOpen && !isSwipeOpen) hapticStep();
+        if (shouldOpen && !isSwipeOpenRef.current) hapticStep();
         onSwipeOpenChange(shouldOpen);
         swipingRef.current = false;
         lastSwipeAt.current = Date.now();
@@ -103,6 +113,10 @@ export default function TodoRow({
   // 스와이프 직후의 탭/롱프레스 오인식 방지 + 열려 있으면 탭으로 닫기
   const guardedEdit = () => {
     if (swipingRef.current || Date.now() - lastSwipeAt.current < 400) return;
+    if (selectMode) {
+      onToggleSelect(item.id);
+      return;
+    }
     if (anySwipeOpen) {
       onSwipeOpenChange(false);
       return;
@@ -111,8 +125,8 @@ export default function TodoRow({
   };
   const guardedDrag = () => {
     if (swipingRef.current || Date.now() - lastSwipeAt.current < 400) return;
-    if (anySwipeOpen) {
-      onSwipeOpenChange(false);
+    if (selectMode || anySwipeOpen) {
+      if (anySwipeOpen) onSwipeOpenChange(false);
       return;
     }
     onStartDrag();
@@ -152,13 +166,21 @@ export default function TodoRow({
           onPressOut={onPressOut}
           delayLongPress={220}
         >
+          {selectMode && (
+            <View style={[s.checkCircle, selected && s.checkCircleOn]}>
+              {selected && <Text style={s.checkMark}>✓</Text>}
+            </View>
+          )}
           <Animated.View style={{ transform: [{ scale: eggScale }] }}>
             <EggIcon total={item.totalSteps} done={item.doneSteps} />
           </Animated.View>
           <View style={s.rowBody}>
             <Text style={[s.rowText, done && s.rowTextDone]}>
+              {item.pinned ? '📌 ' : ''}
+              {item.important ? '⭐ ' : ''}
               {item.title}
               {item.repeat ? ' 🔁' : ''}
+              {item.note?.trim() ? ' 📝' : ''}
             </Text>
             {hasMeta && !done && (
               <View style={s.progressRow}>
@@ -193,7 +215,7 @@ export default function TodoRow({
             )}
           </View>
         </Pressable>
-        {!done ? (
+        {!selectMode && (!done ? (
           <Pressable
             accessibilityLabel="다음 단계"
             style={s.nextBtn}
@@ -220,7 +242,7 @@ export default function TodoRow({
           >
             <Text style={s.unarchiveBtnText}>↩</Text>
           </Pressable>
-        )}
+        ))}
       </Animated.View>
     </View>
   );
@@ -273,6 +295,26 @@ const makeStyles = (C) =>
   },
   rowDragging: {
     opacity: 0.35,
+  },
+  checkCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: C.border,
+    backgroundColor: C.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  checkCircleOn: {
+    backgroundColor: C.orange,
+    borderColor: C.orange,
+  },
+  checkMark: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
   },
   rowBody: {
     flex: 1,

@@ -13,7 +13,9 @@ import {
 import Chip from './Chip';
 import { hapticStep } from './haptics';
 import PondDuck from './PondDuck';
+import { dateStr } from './repeat';
 import { useTheme } from './theme';
+import { isDone } from './utils';
 
 function Crumb({ x, y, onDone }) {
   const opacity = useRef(new Animated.Value(1)).current;
@@ -95,12 +97,13 @@ const fmtDuration = (ms) => {
   return m ? `${h}시간 ${m}분` : `${h}시간`;
 };
 
-export default function DayView({ todos, allTodos, categories, weeklyGoal }) {
+export default function DayView({ todos, allTodos, categories, weeklyGoal, onOpenTodo }) {
   const C = useTheme();
   const s = useMemo(() => makeStyles(C), [C]);
-  const [mode, setMode] = useState('day'); // 'day' | 'week' | 'month' | 'pond'
+  const [mode, setMode] = useState('day'); // 'day' | 'week' | 'month' | 'pond' | 'calendar'
   const [date, setDate] = useState(startOfDay(new Date()));
   const [selectedDuck, setSelectedDuck] = useState(null);
+  const [selectedCalDay, setSelectedCalDay] = useState(null);
   const [pondSize, setPondSize] = useState({ width: 0, height: 0 });
   const [feedSignal, setFeedSignal] = useState(null);
   const [crumbs, setCrumbs] = useState([]);
@@ -185,6 +188,28 @@ export default function DayView({ todos, allTodos, categories, weeklyGoal }) {
     const totalHatched = cells.reduce((s, c) => s + (c?.hatched ?? 0), 0);
     return { cells, totalHatched };
   }, [todos, date]);
+
+  // ---- 달력: 마감일 기준 (완료 여부와 무관하게 그 달의 마감일을 모두 표시)
+  const calendar = useMemo(() => {
+    const first = new Date(date.getFullYear(), date.getMonth(), 1);
+    const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+    const todayStr = dateStr();
+    const cells = [];
+    for (let i = 0; i < first.getDay(); i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) {
+      const ds = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(d)}`;
+      const items = todos.filter((t) => t.dueDate === ds);
+      const anyOverdue = items.some((t) => !isDone(t) && ds < todayStr);
+      const anyUpcoming = items.some((t) => !isDone(t) && ds >= todayStr);
+      cells.push({ day: d, dateStr: ds, items, anyOverdue, anyUpcoming });
+    }
+    while (cells.length % 7 !== 0) cells.push(null);
+    return { cells };
+  }, [todos, date]);
+
+  const selectedCalItems = selectedCalDay
+    ? (calendar.cells.find((c) => c?.dateStr === selectedCalDay)?.items ?? [])
+    : [];
 
   const navLabel =
     mode === 'day'
@@ -316,12 +341,18 @@ export default function DayView({ todos, allTodos, categories, weeklyGoal }) {
 
   return (
     <View style={s.container}>
-      <View style={s.tabs}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={s.tabsScroll}
+        contentContainerStyle={s.tabs}
+      >
         <Chip label="하루" active={mode === 'day'} onPress={() => setMode('day')} />
         <Chip label="주간" active={mode === 'week'} onPress={() => setMode('week')} />
         <Chip label="월간" active={mode === 'month'} onPress={() => setMode('month')} />
+        <Chip label="달력" active={mode === 'calendar'} onPress={() => setMode('calendar')} />
         <Chip label="연못" active={mode === 'pond'} onPress={() => setMode('pond')} />
-      </View>
+      </ScrollView>
 
       <View style={[s.nav, mode === 'pond' && { display: 'none' }]}>
         <Pressable style={s.navBtn} onPress={() => move(-1)} hitSlop={8}>
@@ -543,6 +574,79 @@ export default function DayView({ todos, allTodos, categories, weeklyGoal }) {
         </ScrollView>
       )}
 
+      {mode === 'calendar' && (
+        <ScrollView style={s.body}>
+          <View style={s.statCard}>
+            <Text style={s.statSummary}>이 달의 마감일</Text>
+            <View style={s.monthHead}>
+              {DAY_NAMES.map((n) => (
+                <Text key={n} style={s.monthHeadCell}>
+                  {n}
+                </Text>
+              ))}
+            </View>
+            <View style={s.monthGrid}>
+              {calendar.cells.map((cell, i) => (
+                <Pressable
+                  key={i}
+                  testID={cell ? `cal-day-${cell.dateStr}` : undefined}
+                  style={[
+                    s.monthCell,
+                    cell?.anyOverdue && s.calCellOverdue,
+                    cell?.anyUpcoming && !cell?.anyOverdue && s.calCellUpcoming,
+                    cell?.items.length > 0 && !cell.anyOverdue && !cell.anyUpcoming
+                      ? s.calCellDone
+                      : null,
+                    selectedCalDay === cell?.dateStr && s.calCellSelected,
+                  ]}
+                  disabled={!cell || cell.items.length === 0}
+                  onPress={() => setSelectedCalDay(cell.dateStr)}
+                >
+                  {cell && (
+                    <>
+                      <Text style={s.monthDay}>{cell.day}</Text>
+                      {cell.items.length > 0 && (
+                        <Text style={s.monthCount}>{cell.items.length}</Text>
+                      )}
+                    </>
+                  )}
+                </Pressable>
+              ))}
+            </View>
+            <Text style={s.monthHint}>
+              🟠 지남 · 🟡 예정 · 🟢 완료 — 날짜를 탭하면 그날 마감 항목이 보여요
+            </Text>
+          </View>
+
+          {selectedCalItems.length > 0 && (
+            <View style={s.calList}>
+              {selectedCalItems.map((it) => (
+                <Pressable
+                  key={it.id}
+                  testID={`cal-item-${it.id}`}
+                  style={s.calItemRow}
+                  onPress={() => onOpenTodo?.(it.id)}
+                >
+                  {catById[it.categoryId] && (
+                    <View
+                      style={[s.titleDot, { backgroundColor: catById[it.categoryId].color }]}
+                    />
+                  )}
+                  <Text
+                    style={[s.calItemTitle, isDone(it) && s.calItemTitleDone]}
+                    numberOfLines={1}
+                  >
+                    {it.important ? '⭐ ' : ''}
+                    {it.title}
+                  </Text>
+                  <Text style={s.calItemStatus}>{isDone(it) ? '완료' : '진행 중'}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+        </ScrollView>
+      )}
+
       {mode === 'pond' && (
         <ScrollView style={s.body}>
           <View style={s.pondHeadRow}>
@@ -688,10 +792,16 @@ const makeStyles = (C) =>
   container: {
     flex: 1,
   },
+  tabsScroll: {
+    flexGrow: 0,
+    paddingTop: 2,
+  },
   tabs: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 2,
+    flexGrow: 1,
+    paddingHorizontal: 12,
   },
   nav: {
     flexDirection: 'row',
@@ -1135,6 +1245,49 @@ const makeStyles = (C) =>
   monthHint: {
     marginTop: 8,
     fontSize: 11,
+    color: C.faint,
+  },
+  calCellOverdue: {
+    backgroundColor: 'rgba(233, 106, 76, 0.28)',
+  },
+  calCellUpcoming: {
+    backgroundColor: 'rgba(255, 158, 44, 0.24)',
+  },
+  calCellDone: {
+    backgroundColor: 'rgba(123, 198, 126, 0.28)',
+  },
+  calCellSelected: {
+    borderWidth: 2,
+    borderColor: C.orange,
+  },
+  calList: {
+    marginTop: 10,
+    marginHorizontal: 12,
+  },
+  calItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: C.card,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 6,
+  },
+  calItemTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: C.text,
+  },
+  calItemTitleDone: {
+    color: C.done,
+    textDecorationLine: 'line-through',
+  },
+  calItemStatus: {
+    fontSize: 12,
+    fontWeight: '700',
     color: C.faint,
   },
 });
