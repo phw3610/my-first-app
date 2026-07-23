@@ -253,7 +253,8 @@ export default function App() {
   const hasUncategorized = active.some((t) => !catById[t.categoryId]);
 
   // 진행 중 먼저, 완료는 뒤로. 마감일순 모드면 진행 중을 마감일 오름차순으로.
-  // 고정(pinned)은 그 안에서 항상 최상단으로(안정 정렬이라 상대 순서는 유지).
+  // 중요(important)는 그 안에서 위로, 고정(pinned)은 항상 최상단으로
+  // (안정 정렬이라 상대 순서는 유지 → pinned > important > 나머지).
   const orderTodos = (list) => {
     const act = list.filter((t) => !isDone(t));
     const dn = list.filter(isDone);
@@ -262,6 +263,7 @@ export default function App() {
         (a.dueDate ?? '9999-99-99').localeCompare(b.dueDate ?? '9999-99-99'),
       );
     }
+    act.sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0));
     act.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
     return [...act, ...dn];
   };

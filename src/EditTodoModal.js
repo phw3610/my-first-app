@@ -112,7 +112,7 @@ export default function EditTodoModal({
   };
 
   const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
-  const MONTHDAYS = [1, 5, 10, 15, 20, 25, 31];
+  const MONTHDAYS = Array.from({ length: 31 }, (_, i) => i + 1);
   const fmtMonthDay = (n) => (n === 31 ? '말일' : `${n}일`);
 
   const toggleWeekday = (d) => {

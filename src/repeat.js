@@ -38,9 +38,13 @@ export function spawnRepeats(data) {
       timeline: [],
       archived: false,
       reminder: null,
+      dueDate: null,
       createdAt: Date.now(),
       lastSpawnedDate: today,
-      steps: t.steps.map((s) => ({ text: s.text, attachments: s.attachments })),
+      steps: t.steps.map((s) => ({
+        text: s.text,
+        attachments: (s.attachments ?? []).map((a) => ({ ...a })),
+      })),
     });
     return { ...t, repeat: null, archived: true, archivedAt: new Date().toISOString() };
   });
