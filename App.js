@@ -40,7 +40,6 @@ import {
 } from './src/storage';
 import { CATEGORY_COLORS, useTheme } from './src/theme';
 import { hatchStreak, isDone, isStarted, weekHatchCount } from './src/utils';
-import { syncWidgets } from './src/widget';
 
 export default function App() {
   const C = useTheme();
@@ -137,10 +136,7 @@ export default function App() {
   }, [loaded, runMaintenance]);
 
   useEffect(() => {
-    if (loaded) {
-      saveData(data);
-      syncWidgets(data);
-    }
+    if (loaded) saveData(data);
   }, [data, loaded]);
 
   // 남은 알 개수를 앱 아이콘 배지로 (옵션, 기본 꺼짐 — 꺼져 있으면 배지를 지운다)
