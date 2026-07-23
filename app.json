@@ -2,7 +2,7 @@
   "expo": {
     "name": "Duck's Todo",
     "slug": "my-first-app",
-    "version": "0.7.14",
+    "version": "0.7.15",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -14,7 +14,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.phw3610.myfirstapp"
+      "bundleIdentifier": "com.phw3610.myfirstapp",
+      "entitlements": {
+        "com.apple.security.application-groups": ["group.com.phw3610.myfirstapp"]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -28,7 +31,8 @@
     },
     "plugins": [
       "expo-audio",
-      "expo-asset"
+      "expo-asset",
+      "@bacons/apple-targets"
     ]
   }
 }
