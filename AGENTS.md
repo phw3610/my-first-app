@@ -11,8 +11,15 @@
 ## 무료 서명 환경의 한계 (기능 설계 시 필수 확인)
 
 - ❌ 원격 푸시(APNs), iCloud entitlement, App Groups 의존 기능 — 동작 안 함
+  (2026-07 실측: `ios.entitlements`에 `application-groups`를 추가하고 WidgetKit
+  익스텐션을 붙였더니 CI 빌드/아카이브는 성공했지만, SideStore로 설치하자 **앱이
+  아예 실행되지 않고 즉시 튕김** — 무료 Apple ID 재서명이 App Group capability를
+  제대로 프로비저닝하지 못해 코드서명 검증에서 막히는 것으로 보임. 커밋
+  `5b841c0`→`6daffc4`(revert)로 롤백함. App Group이 필요한 기능은 유료 계정
+  전환 전까지 시도하지 말 것.)
 - ✅ 로컬 알림, 파일 공유 시트, 순수 JS SDK(Firebase 등)는 동작
-- 위젯/확장은 서명 이슈로 불안정 — 사전 논의 없이 추가하지 말 것
+- 위젯/확장은 서명 이슈로 불안정 — 사전 논의 없이 추가하지 말 것 (홈 화면 롱프레스
+  퀵 액션처럼 App Group·별도 익스텐션이 필요 없는 대안은 가능)
 
 ## 아키텍처
 
